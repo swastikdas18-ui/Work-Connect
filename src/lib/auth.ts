@@ -8,7 +8,7 @@ export interface AuthContextType {
   loading: boolean;
   isAdminOrOwner: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, fullName: string, headline: string, avatarUrl: string, role: 'owner' | 'admin' | 'member') => Promise<void>;
+  signUp: (email: string, password: string, fullName: string, headline: string, avatarUrl: string, role: 'owner' | 'admin' | 'member') => Promise<{ emailVerificationRequired: boolean; email?: string } | void>;
   signOut: () => Promise<void>;
   setRole: (role: 'owner' | 'admin' | 'member') => Promise<void>;
   updateProfile: (fullName: string, headline: string, avatarUrl: string) => Promise<void>;
@@ -147,7 +147,7 @@ export function useAuth() {
     headline: string, 
     avatarUrl: string, 
     role: 'owner' | 'admin' | 'member'
-  ) => {
+  ): Promise<{ emailVerificationRequired: boolean; email?: string } | void> => {
     setLoading(true);
     try {
       if (isSupabaseConfigured) {
@@ -165,20 +165,12 @@ export function useAuth() {
         });
         if (error) throw error;
         
-        // After signup, we immediately upsert the profile to guarantee row completion
-        if (data.user) {
-          const profile: Profile = {
-            id: data.user.id,
-            full_name: fullName,
-            avatar_url: avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80',
-            headline,
-            cohort_tag: 'Interns Summer 2026',
-            karma_points: 0,
-            role
-          };
-          await dbService.upsertProfile(profile);
-          setUser(profile);
+        if (!data.session && data.user) {
+          return { emailVerificationRequired: true, email };
+        } else if (data.user) {
+          await fetchProfile(data.user.id);
         }
+        return { emailVerificationRequired: false };
       } else {
         // Local Mock Signup
         const generatedId = `mock-u-${email.replace(/[^a-zA-Z0-9]/g, '')}`;
@@ -194,6 +186,7 @@ export function useAuth() {
         await dbService.upsertProfile(newProfile);
         setUser(newProfile);
         localStorage.setItem(LOCAL_MOCK_USER_KEY, JSON.stringify(newProfile));
+        return { emailVerificationRequired: false };
       }
     } finally {
       setLoading(false);

@@ -33,6 +33,7 @@ import {
   Loader2,
   Check,
   ShieldAlert,
+  Mail,
   User as UserIcon
 } from 'lucide-react';
 
@@ -66,7 +67,12 @@ import {
 import { SUPABASE_SETUP_SQL } from './data/setupSql';
 
 export default function App() {
-  const { user, loading: authLoading, signIn, signUp, signOut, setRole, updateProfile } = useAuth();
+  const { user, session, loading: authLoading, signIn, signUp, signOut, setRole, updateProfile } = useAuth();
+  
+  // Custom states for intercepted community creation and unhandled email verification
+  const [authBannerMessage, setAuthBannerMessage] = useState<string | null>(null);
+  const [pendingCreateCommunity, setPendingCreateCommunity] = useState<boolean>(false);
+  const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
   
   // Navigation View modes: 'portal' or 'community'
   const [viewMode, setViewMode] = useState<'portal' | 'community'>('portal');
@@ -90,7 +96,7 @@ export default function App() {
     ? memberships.find(m => m.community_id === selectedCommunityId)
     : null;
   const currentRole = currentMembership ? currentMembership.role : 'member';
-  const isAdminOrOwner = currentRole === 'owner' || currentRole === 'admin' || user?.role === 'admin' || user?.role === 'owner';
+  const isAdminOrOwner = currentRole === 'owner' || currentRole === 'admin';
 
   // State controls
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -150,6 +156,32 @@ export default function App() {
       showToast('Live database is uninitialized. Running in local sandbox.');
     });
   }, []);
+
+  useEffect(() => {
+    if (user && pendingCreateCommunity) {
+      setShowCreateModal(true);
+      setPendingCreateCommunity(false);
+      setAuthBannerMessage(null);
+    }
+  }, [user, pendingCreateCommunity]);
+
+  const handleCreateCommunityClick = () => {
+    if (!user) {
+      setAuthBannerMessage("Please sign in or create an account to start a community.");
+      setPendingCreateCommunity(true);
+      setAuthMode('signin');
+      setShowAuthModal(true);
+    } else {
+      setShowCreateModal(true);
+    }
+  };
+
+  const closeAuthModal = () => {
+    setShowAuthModal(false);
+    setVerificationEmail(null);
+    setAuthBannerMessage(null);
+    setPendingCreateCommunity(false);
+  };
 
   // State to control on-demand auth modal visibility
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -213,9 +245,9 @@ export default function App() {
       if (selectedCommunityId) {
         const activeId = selectedCommunityId;
         const [hydratedPosts, hydratedCourses, hydratedEvents, hydratedNewsletters] = await Promise.all([
-          getHydratedPosts(activeId),
+          getHydratedPosts(activeId, user ? user.id : undefined),
           getHydratedCourses(activeId, user ? user.id : 'anonymous'),
-          getHydratedEvents(activeId),
+          getHydratedEvents(activeId, user ? user.id : undefined),
           getHydratedNewsletters(activeId)
         ]);
         setPosts(hydratedPosts);
@@ -286,8 +318,12 @@ export default function App() {
   // Create community submit
   const handleCreateCommunity = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user || !session) {
+      showToast('Authentication Error: An active session is required to create a community.');
+      return;
+    }
     if (!ensureUserAuthenticated('create a community')) return;
-    if (!newCommName.trim() || !newCommSlug.trim() || !user) return;
+    if (!newCommName.trim() || !newCommSlug.trim()) return;
 
     try {
       const commId = generateId('c');
@@ -368,24 +404,29 @@ export default function App() {
       const postItem = posts.find(p => p.id === postId);
       if (!postItem) return;
 
-      const incremented = (postItem.upvotes || 0) + 1;
-      await dbService.updatePostUpvotes(postId, incremented);
+      const { action, upvotes_count } = await dbService.togglePostUpvote(postId, user.id);
       
       // Reward Karma Points to post author
       if (postItem.author.id) {
         const authorProfile = await dbService.getProfile(postItem.author.id);
         if (authorProfile) {
+          const karmaDiff = action === 'upvoted' ? 10 : -10;
           await dbService.upsertProfile({
             ...authorProfile,
-            karma_points: (authorProfile.karma_points || 0) + 10
+            karma_points: Math.max(0, (authorProfile.karma_points || 0) + karmaDiff)
           });
         }
       }
 
-      showToast('Voted! Dynamic karma points allocated.');
+      if (action === 'upvoted') {
+        showToast('Post upvoted!');
+      } else {
+        showToast('Upvote removed.');
+      }
       await loadDatabaseData();
     } catch (err) {
       console.error(err);
+      showToast('Failed to toggle upvote.');
     }
   };
 
@@ -518,7 +559,7 @@ export default function App() {
   };
 
   // Calendar - Schedule Event Action
-  const handleAddEvent = async (title: string, description: string, date: string, time: string, meetUrl: string) => {
+  const handleAddEvent = async (title: string, description: string, startsAtIso: string, meetUrl: string) => {
     if (!selectedCommunityId || !user) return;
     try {
       const eId = generateId('evt');
@@ -529,7 +570,7 @@ export default function App() {
         description,
         host_name: user.full_name,
         host_avatar: user.avatar_url,
-        starts_at: `${date} at ${time}`,
+        starts_at: startsAtIso,
         meet_url: meetUrl,
         attendees_count: 1
       });
@@ -543,7 +584,23 @@ export default function App() {
 
   // Calendar - RSVP
   const handleRSVPEvent = async (eventId: string) => {
-    showToast('RSVP confirmed! Added to your schedule.');
+    if (!user) {
+      showToast('Please sign in or create an account to RSVP.');
+      setShowAuthModal(true);
+      return;
+    }
+    try {
+      const { rsvped } = await dbService.toggleRSVP(eventId, user.id);
+      if (rsvped) {
+        showToast('RSVP confirmed! Added to your schedule.');
+      } else {
+        showToast('RSVP cancelled successfully.');
+      }
+      await loadDatabaseData();
+    } catch (e) {
+      console.error('RSVP Error:', e);
+      showToast('Failed to register RSVP.');
+    }
   };
 
   // Newsletter - Add Broadcast Action
@@ -586,16 +643,33 @@ export default function App() {
       if (authMode === 'signin') {
         await signIn(suEmail, suPassword);
         showToast('Successfully signed in!');
+        if (pendingCreateCommunity) {
+          setShowCreateModal(true);
+          setPendingCreateCommunity(false);
+          setAuthBannerMessage(null);
+        }
+        setShowAuthModal(false);
       } else {
         if (!suName.trim()) {
           showToast('Please provide your full name for sign up.');
           return;
         }
         const computedAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(suName)}&background=6366f1&color=fff&size=128`;
-        await signUp(suEmail, suPassword, suName, suHeadline || 'Intern', computedAvatar, 'member');
-        showToast('Welcome! Your profile has been created.');
+        const res = await signUp(suEmail, suPassword, suName, suHeadline || 'Intern', computedAvatar, 'member');
+        
+        if (res && res.emailVerificationRequired) {
+          setVerificationEmail(res.email || suEmail);
+          showToast('Verification email sent!');
+        } else {
+          showToast('Welcome! Your profile has been created.');
+          if (pendingCreateCommunity) {
+            setShowCreateModal(true);
+            setPendingCreateCommunity(false);
+            setAuthBannerMessage(null);
+          }
+          setShowAuthModal(false);
+        }
       }
-      setShowAuthModal(false);
     } catch (err: any) {
       console.error(err);
       showToast(err.message || 'Authentication transaction failed.');
@@ -624,38 +698,16 @@ export default function App() {
     );
   }
 
+  const isAnyModalOpen = showCreateModal || showProfileModal || showSearchModal || showAuthModal;
+
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 flex flex-col font-sans select-none antialiased">
       
-      {/* Dynamic Role Tester Banner (Visual Proof of RBAC Gating) */}
-      {user && (
-        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center flex items-center justify-center gap-3 text-xs font-bold text-amber-700 dark:text-amber-400">
-          <div className="flex items-center gap-1">
-            <ShieldAlert className="h-4 w-4" />
-            <span>Role Simulator: Currently testing as <strong className="uppercase font-extrabold">{user.role}</strong></span>
-          </div>
-          <div className="flex items-center bg-white/40 dark:bg-zinc-900/60 p-0.5 rounded-lg border border-amber-500/30">
-            <button 
-              onClick={() => { setRole('member'); showToast('Role toggled to Member.'); }}
-              className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${user.role === 'member' ? 'bg-amber-500 text-white' : 'text-zinc-500'}`}
-            >
-              Member
-            </button>
-            <button 
-              onClick={() => { setRole('admin'); showToast('Role toggled to Admin.'); }}
-              className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${user.role === 'admin' ? 'bg-amber-500 text-white' : 'text-zinc-500'}`}
-            >
-              Admin
-            </button>
-            <button 
-              onClick={() => { setRole('owner'); showToast('Role toggled to Owner.'); }}
-              className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${user.role === 'owner' ? 'bg-amber-500 text-white' : 'text-zinc-500'}`}
-            >
-              Owner
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Outer wrapper to trap focus and prevent keyboard navigation behind modals */}
+      <div 
+        className="flex-1 flex flex-col"
+        {...(isAnyModalOpen ? { inert: '' } : {})}
+      >
 
       {/* Supabase Schema Missing Resilient Fallback Banner */}
       {schemaMissing && (
@@ -694,21 +746,31 @@ export default function App() {
         <div className="max-w-7xl mx-auto w-full flex items-center justify-between gap-4">
           
           {/* Logo & Cohort switcher */}
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={() => { setViewMode('portal'); setSelectedCommunityId(null); }}
-              className="flex items-center gap-2"
-            >
-              <div className="h-7 w-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-extrabold shadow-sm hover:scale-105 transition-transform">
-                <span>W</span>
-              </div>
-              <span className="text-sm font-black tracking-tight text-zinc-950 dark:text-white hidden sm:block">Work Connect</span>
-            </button>
+          <div className="flex items-center gap-3">
+            {viewMode === 'community' ? (
+              <button 
+                onClick={() => { setViewMode('portal'); setSelectedCommunityId(null); }}
+                className="flex items-center gap-1.5 text-xs font-bold text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200 px-3 py-2 rounded-xl transition-all dark:text-zinc-300 dark:hover:text-white dark:bg-zinc-900 dark:hover:bg-zinc-800 shadow-sm"
+                id="back-to-portal-breadcrumb"
+              >
+                <span>← Back to Portal</span>
+              </button>
+            ) : (
+              <button 
+                onClick={() => { setViewMode('portal'); setSelectedCommunityId(null); }}
+                className="flex items-center gap-2"
+              >
+                <div className="h-7 w-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-extrabold shadow-sm hover:scale-105 transition-transform">
+                  <span>W</span>
+                </div>
+                <span className="text-sm font-black tracking-tight text-zinc-950 dark:text-white hidden sm:block">Work Connect</span>
+              </button>
+            )}
 
             {viewMode === 'community' && activeCommunity && (
               <>
-                <ChevronRight className="h-4 w-4 text-zinc-300 hidden sm:block" />
-                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-50 hidden sm:block truncate max-w-[150px]">
+                <ChevronRight className="h-4 w-4 text-zinc-300 hidden md:block" />
+                <span className="text-xs font-extrabold text-zinc-900 dark:text-zinc-50 hidden md:block truncate max-w-[150px]">
                   {activeCommunity.name}
                 </span>
               </>
@@ -842,6 +904,17 @@ export default function App() {
               </div>
             ) : null}
 
+            {/* Create Community Navigation control */}
+            {viewMode === 'portal' && (
+              <button 
+                onClick={handleCreateCommunityClick}
+                className="hidden md:flex items-center gap-1.5 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900 transition-all"
+              >
+                <Plus className="h-3.5 w-3.5 text-indigo-500" />
+                <span>Create Community</span>
+              </button>
+            )}
+
             {/* PWA Direct trigger */}
             {isInstallable && (
               <button 
@@ -933,7 +1006,7 @@ export default function App() {
 
                 <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
                   <button 
-                    onClick={() => setShowCreateModal(true)}
+                    onClick={handleCreateCommunityClick}
                     className="bg-zinc-950 hover:bg-zinc-850 text-white dark:bg-white dark:text-zinc-950 text-xs font-bold px-5 py-2.5 rounded-xl shadow-md flex items-center gap-1.5 transition-transform hover:scale-105"
                   >
                     <Plus className="h-4 w-4" />
@@ -1020,12 +1093,12 @@ export default function App() {
                 )}
               </div>
 
-              {/* Discover Public Hubs Grid */}
+              {/* Explore Public Communities Grid */}
               <div className="space-y-4" id="discover-hubs">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-100 pb-2 dark:border-zinc-900">
                   <h2 className="text-sm font-extrabold text-zinc-900 dark:text-zinc-50 flex items-center gap-1.5">
                     <Compass className="h-4 w-4 text-indigo-500" />
-                    Discover Public Hubs ({discoverCommunities.length})
+                    Explore Communities ({discoverCommunities.length})
                   </h2>
 
                   <div className="flex bg-zinc-100 p-0.5 rounded-lg dark:bg-zinc-900">
@@ -1267,6 +1340,8 @@ export default function App() {
           </button>
         </div>
       )}
+
+      </div>
 
       {/* CREATE A COMMUNITY MODAL */}
       <AnimatePresence>
@@ -1603,142 +1678,186 @@ export default function App() {
       <AnimatePresence>
         {showAuthModal && (
           <>
-            <div className="fixed inset-0 bg-black/60 z-50 backdrop-blur-xs" onClick={() => setShowAuthModal(false)} />
+            <div className="fixed inset-0 bg-black/60 z-50 backdrop-blur-xs" onClick={closeAuthModal} />
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: '-45%', x: '-50%' }}
               animate={{ opacity: 1, scale: 1, y: '-50%', x: '-50%' }}
               exit={{ opacity: 0, scale: 0.95, y: '-45%', x: '-50%' }}
               className="fixed top-1/2 left-1/2 w-[92%] max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-2xl z-50 space-y-5 overflow-y-auto max-h-[85vh]"
             >
-              <div className="text-center space-y-1 relative">
-                <button 
-                  onClick={() => setShowAuthModal(false)}
-                  className="absolute -top-1 -right-1 p-1.5 rounded-lg text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all"
-                >
-                  <X className="h-4.5 w-4.5" />
-                </button>
-                <div className="h-10 w-10 rounded-xl bg-indigo-500 text-white flex items-center justify-center mx-auto shadow-md">
-                  <Sparkles className="h-5.5 w-5.5" />
-                </div>
-                <h2 className="text-lg font-extrabold tracking-tight text-zinc-900 dark:text-white mt-2">Welcome to Work Connect</h2>
-                <p className="text-[11px] text-zinc-500">Connect with cohorts, exchange insights, and milestones.</p>
-                
-                <div className="pt-1">
-                  {isSupabaseConfigured ? (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-200/50">
-                      <span className="h-1 w-1 rounded-full bg-emerald-500 animate-pulse" />
-                      Live Supabase Server Active
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-extrabold bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 border border-amber-200/50">
-                      <span className="h-1 w-1 rounded-full bg-amber-500 animate-pulse" />
-                      Offline Sandbox Mode Active
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Tab Selector */}
-              <div className="flex bg-zinc-100 p-1 rounded-xl dark:bg-zinc-800">
-                <button
-                  onClick={() => setAuthMode('signin')}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                    authMode === 'signin'
-                      ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-700 dark:text-zinc-50'
-                      : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400'
-                  }`}
-                >
-                  Sign In
-                </button>
-                <button
-                  onClick={() => setAuthMode('signup')}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                    authMode === 'signup'
-                      ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-700 dark:text-zinc-50'
-                      : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400'
-                  }`}
-                >
-                  Sign Up
-                </button>
-              </div>
-
-              <form onSubmit={handleAuthSubmit} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Email Address</label>
-                  <input 
-                    type="email" 
-                    required
-                    placeholder="e.g. alex@company.com"
-                    value={suEmail}
-                    onChange={(e) => setSuEmail(e.target.value)}
-                    className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Password</label>
-                  <input 
-                    type="password" 
-                    required
-                    placeholder="••••••••"
-                    value={suPassword}
-                    onChange={(e) => setSuPassword(e.target.value)}
-                    className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
-                  />
-                </div>
-
-                {authMode === 'signup' && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="space-y-4 pt-2 border-t border-zinc-100 dark:border-zinc-800"
+              {verificationEmail ? (
+                <div className="text-center space-y-5 py-4">
+                  <button 
+                    onClick={closeAuthModal}
+                    className="absolute top-4 right-4 p-1.5 rounded-lg text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all"
                   >
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Full Name</label>
-                      <input 
-                        type="text" 
-                        required={authMode === 'signup'}
-                        placeholder="e.g. Alex Rivera"
-                        value={suName}
-                        onChange={(e) => setSuName(e.target.value)}
-                        className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Headline / Title</label>
-                      <input 
-                        type="text" 
-                        placeholder="e.g. Software Engineering Intern"
-                        value={suHeadline}
-                        onChange={(e) => setSuHeadline(e.target.value)}
-                        className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
-                      />
-                    </div>
-                  </motion.div>
-                )}
-
-                <div className="pt-2">
+                    <X className="h-4.5 w-4.5" />
+                  </button>
+                  <div className="h-12 w-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto dark:bg-emerald-950/40 dark:text-emerald-450 animate-pulse">
+                    <Mail className="h-6 w-6" />
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-base font-extrabold text-zinc-900 dark:text-white">Verify Your Email</h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed max-w-sm mx-auto">
+                      Check your email: We sent a confirmation link to <span className="font-extrabold text-zinc-850 dark:text-zinc-150">{verificationEmail}</span>. Verify your email to complete registration.
+                    </p>
+                  </div>
                   <button
-                    type="submit"
+                    onClick={() => {
+                      setVerificationEmail(null);
+                      setAuthMode('signin');
+                    }}
                     className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-xl shadow-lg transition-all"
                   >
-                    {authMode === 'signin' ? 'Sign In' : 'Create Account'}
+                    Back to Sign In
                   </button>
                 </div>
+              ) : (
+                <>
+                  <div className="text-center space-y-1 relative">
+                    <button 
+                      onClick={closeAuthModal}
+                      className="absolute -top-1 -right-1 p-1.5 rounded-lg text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all"
+                    >
+                      <X className="h-4.5 w-4.5" />
+                    </button>
+                    <div className="h-10 w-10 rounded-xl bg-indigo-500 text-white flex items-center justify-center mx-auto shadow-md">
+                      <Sparkles className="h-5.5 w-5.5" />
+                    </div>
+                    <h2 className="text-lg font-extrabold tracking-tight text-zinc-900 dark:text-white mt-2">Welcome to Work Connect</h2>
+                    <p className="text-[11px] text-zinc-500">Connect with cohorts, exchange insights, and milestones.</p>
+                    
+                    <div className="pt-1">
+                      {isSupabaseConfigured ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-200/50">
+                          <span className="h-1 w-1 rounded-full bg-emerald-500 animate-pulse" />
+                          Live Supabase Server Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-extrabold bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 border border-amber-200/50">
+                          <span className="h-1 w-1 rounded-full bg-amber-500 animate-pulse" />
+                          Offline Sandbox Mode Active
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
-                <div className="text-center pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
-                    className="text-xs text-indigo-600 hover:text-indigo-700 font-bold dark:text-indigo-400 dark:hover:text-indigo-300 transition-all"
-                  >
-                    {authMode === 'signin' 
-                      ? "Don't have an account? Sign Up" 
-                      : "Already have an account? Sign In"}
-                  </button>
-                </div>
-              </form>
+                  {authBannerMessage && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-indigo-50/70 border border-indigo-100/40 dark:bg-indigo-950/20 dark:border-indigo-900/50 p-3.5 rounded-2xl flex items-start gap-2.5"
+                    >
+                      <ShieldAlert className="h-4.5 w-4.5 text-indigo-650 dark:text-indigo-400 shrink-0 mt-0.5" />
+                      <p className="text-xs text-indigo-850 dark:text-indigo-300 font-medium leading-relaxed text-left">
+                        {authBannerMessage}
+                      </p>
+                    </motion.div>
+                  )}
+
+                  {/* Tab Selector */}
+                  <div className="flex bg-zinc-100 p-1 rounded-xl dark:bg-zinc-800">
+                    <button
+                      onClick={() => setAuthMode('signin')}
+                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                        authMode === 'signin'
+                          ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-700 dark:text-zinc-50'
+                          : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400'
+                      }`}
+                    >
+                      Sign In
+                    </button>
+                    <button
+                      onClick={() => setAuthMode('signup')}
+                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                        authMode === 'signup'
+                          ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-700 dark:text-zinc-50'
+                          : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400'
+                      }`}
+                    >
+                      Sign Up
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleAuthSubmit} className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Email Address</label>
+                      <input 
+                        type="email" 
+                        required
+                        placeholder="e.g. alex@company.com"
+                        value={suEmail}
+                        onChange={(e) => setSuEmail(e.target.value)}
+                        className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Password</label>
+                      <input 
+                        type="password" 
+                        required
+                        placeholder="••••••••"
+                        value={suPassword}
+                        onChange={(e) => setSuPassword(e.target.value)}
+                        className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                      />
+                    </div>
+
+                    {authMode === 'signup' && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="space-y-4 pt-2 border-t border-zinc-100 dark:border-zinc-800"
+                      >
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Full Name</label>
+                          <input 
+                            type="text" 
+                            required={authMode === 'signup'}
+                            placeholder="e.g. Alex Rivera"
+                            value={suName}
+                            onChange={(e) => setSuName(e.target.value)}
+                            className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Headline / Title</label>
+                          <input 
+                            type="text" 
+                            placeholder="e.g. Software Engineering Intern"
+                            value={suHeadline}
+                            onChange={(e) => setSuHeadline(e.target.value)}
+                            className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                          />
+                        </div>
+                      </motion.div>
+                    )}
+
+                    <div className="pt-2">
+                      <button
+                        type="submit"
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-xl shadow-lg transition-all"
+                      >
+                        {authMode === 'signin' ? 'Sign In' : 'Create Account'}
+                      </button>
+                    </div>
+
+                    <div className="text-center pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
+                        className="text-xs text-indigo-600 hover:text-indigo-700 font-bold dark:text-indigo-400 dark:hover:text-indigo-300 transition-all"
+                      >
+                        {authMode === 'signin' 
+                          ? "Don't have an account? Sign Up" 
+                          : "Already have an account? Sign In"}
+                      </button>
+                    </div>
+                  </form>
+                </>
+              )}
             </motion.div>
           </>
         )}

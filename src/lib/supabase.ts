@@ -101,6 +101,13 @@ export interface LessonCompletion {
   completed_at: string;
 }
 
+export interface EventRSVP {
+  id: string;
+  event_id: string;
+  user_id: string;
+  created_at?: string;
+}
+
 // Check configuration status
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -218,10 +225,12 @@ export const dbService = {
 
   async getLeaderboard(): Promise<Profile[]> {
     return wrapDbCall(
-      () => supabase.from('profiles').select('*').order('karma_points', { ascending: false }),
+      () => supabase.from('profiles').select('*').not('full_name', 'in', '("QA Auditor","Guest User")').order('karma_points', { ascending: false }),
       () => {
         const profiles = getLocalData<Profile[]>('profiles', []);
-        return [...profiles].sort((a, b) => b.karma_points - a.karma_points);
+        return [...profiles]
+          .filter(p => p.full_name !== 'QA Auditor' && p.full_name !== 'Guest User')
+          .sort((a, b) => b.karma_points - a.karma_points);
       }
     );
   },
@@ -320,28 +329,71 @@ export const dbService = {
     );
   },
 
-  async updatePostUpvotes(postId: string, increment: number): Promise<void> {
+  async togglePostUpvote(postId: string, userId: string): Promise<{ action: 'upvoted' | 'downvoted'; upvotes_count: number }> {
     return wrapDbCall(
       async () => {
-        const { data, error: selectErr } = await supabase
-          .from('posts')
-          .select('upvotes_count')
-          .eq('id', postId)
-          .single();
-        if (selectErr) return { data: null, error: selectErr };
-        const currentCount = data?.upvotes_count || 0;
-        return supabase
-          .from('posts')
-          .update({ upvotes_count: currentCount + increment })
-          .eq('id', postId);
+        const { data, error } = await supabase.rpc('toggle_post_upvote', { target_post_id: postId });
+        if (error) {
+          console.warn("RPC toggle_post_upvote failed or not found, falling back to client transaction:", error);
+          const { data: existing, error: findError } = await supabase
+            .from('post_upvotes')
+            .select('*')
+            .eq('post_id', postId)
+            .eq('user_id', userId)
+            .maybeSingle();
+
+          if (findError) return { data: null, error: findError };
+
+          const { data: postData } = await supabase
+            .from('posts')
+            .select('upvotes_count')
+            .eq('id', postId)
+            .single();
+          const currentCount = postData?.upvotes_count || 0;
+
+          if (existing) {
+            await supabase.from('post_upvotes').delete().eq('post_id', postId).eq('user_id', userId);
+            const newCount = Math.max(0, currentCount - 1);
+            await supabase.from('posts').update({ upvotes_count: newCount }).eq('id', postId);
+            return { data: { action: 'downvoted', upvotes_count: newCount }, error: null };
+          } else {
+            await supabase.from('post_upvotes').insert({ post_id: postId, user_id: userId });
+            const newCount = currentCount + 1;
+            await supabase.from('posts').update({ upvotes_count: newCount }).eq('id', postId);
+            return { data: { action: 'upvoted', upvotes_count: newCount }, error: null };
+          }
+        }
+        return { data, error: null };
       },
       () => {
+        const upvotes = getLocalData<any[]>('post_upvotes', []);
+        const idx = upvotes.findIndex(u => u.post_id === postId && u.user_id === userId);
         const posts = getLocalData<Post[]>('posts', []);
-        const index = posts.findIndex(p => p.id === postId);
-        if (index >= 0) {
-          posts[index].upvotes_count += increment;
+        const postIdx = posts.findIndex(p => p.id === postId);
+        let action: 'upvoted' | 'downvoted' = 'upvoted';
+        let upvotes_count = 1;
+
+        if (postIdx >= 0) {
+          upvotes_count = posts[postIdx].upvotes_count || 0;
+        }
+
+        if (idx >= 0) {
+          upvotes.splice(idx, 1);
+          upvotes_count = Math.max(0, upvotes_count - 1);
+          action = 'downvoted';
+        } else {
+          upvotes.push({ id: `upvote-${Date.now()}`, post_id: postId, user_id: userId });
+          upvotes_count = upvotes_count + 1;
+          action = 'upvoted';
+        }
+
+        if (postIdx >= 0) {
+          posts[postIdx].upvotes_count = upvotes_count;
           setLocalData('posts', posts);
         }
+        setLocalData('post_upvotes', upvotes);
+
+        return { action, upvotes_count };
       }
     );
   },
@@ -424,6 +476,103 @@ export const dbService = {
           events[index].attendees_count += increment;
           setLocalData('events', events);
         }
+      }
+    );
+  },
+
+  async listEventRSVPs(userId: string): Promise<EventRSVP[]> {
+    return wrapDbCall(
+      () => supabase.from('event_rsvps').select('*').eq('user_id', userId),
+      () => {
+        const rsvps = getLocalData<EventRSVP[]>('event_rsvps', []);
+        return rsvps.filter(r => r.user_id === userId);
+      }
+    );
+  },
+
+  async toggleRSVP(eventId: string, userId: string): Promise<{ rsvped: boolean }> {
+    return wrapDbCall(
+      async () => {
+        // Check if RSVP already exists
+        const { data: existing, error: findError } = await supabase
+          .from('event_rsvps')
+          .select('*')
+          .eq('event_id', eventId)
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (findError) return { data: null, error: findError };
+
+        if (existing) {
+          // Delete RSVP row
+          const { error: deleteError } = await supabase
+            .from('event_rsvps')
+            .delete()
+            .eq('event_id', eventId)
+            .eq('user_id', userId);
+
+          if (deleteError) return { data: null, error: deleteError };
+
+          // Decrement attendees_count
+          const { data: eventData } = await supabase
+            .from('events')
+            .select('attendees_count')
+            .eq('id', eventId)
+            .single();
+          const currentCount = eventData?.attendees_count || 0;
+          await supabase
+            .from('events')
+            .update({ attendees_count: Math.max(0, currentCount - 1) })
+            .eq('id', eventId);
+
+          return { data: { rsvped: false }, error: null };
+        } else {
+          // Insert RSVP row
+          const { error: insertError } = await supabase
+            .from('event_rsvps')
+            .insert({ event_id: eventId, user_id: userId });
+
+          if (insertError) return { data: null, error: insertError };
+
+          // Increment attendees_count
+          const { data: eventData } = await supabase
+            .from('events')
+            .select('attendees_count')
+            .eq('id', eventId)
+            .single();
+          const currentCount = eventData?.attendees_count || 0;
+          await supabase
+            .from('events')
+            .update({ attendees_count: currentCount + 1 })
+            .eq('id', eventId);
+
+          return { data: { rsvped: true }, error: null };
+        }
+      },
+      () => {
+        const rsvps = getLocalData<EventRSVP[]>('event_rsvps', []);
+        const idx = rsvps.findIndex(r => r.event_id === eventId && r.user_id === userId);
+        const events = getLocalData<Event[]>('events', []);
+        const eventIdx = events.findIndex(e => e.id === eventId);
+        let rsvped = false;
+
+        if (idx >= 0) {
+          rsvps.splice(idx, 1);
+          if (eventIdx >= 0) {
+            events[eventIdx].attendees_count = Math.max(0, (events[eventIdx].attendees_count || 0) - 1);
+          }
+          rsvped = false;
+        } else {
+          rsvps.push({ id: `rsvp-${Date.now()}`, event_id: eventId, user_id: userId });
+          if (eventIdx >= 0) {
+            events[eventIdx].attendees_count = (events[eventIdx].attendees_count || 0) + 1;
+          }
+          rsvped = true;
+        }
+
+        setLocalData('event_rsvps', rsvps);
+        setLocalData('events', events);
+        return { rsvped };
       }
     );
   },
@@ -617,9 +766,22 @@ export async function getHydratedComments(postId: string): Promise<UIComment[]> 
   return uiComments;
 }
 
-export async function getHydratedPosts(communityId: string): Promise<UIPost[]> {
+export async function getHydratedPosts(communityId: string, currentUserId?: string): Promise<UIPost[]> {
   const dbPosts = await dbService.listPosts(communityId);
   const uiPosts: UIPost[] = [];
+  
+  let userUpvotes: any[] = [];
+  if (currentUserId) {
+    try {
+      const { data } = await supabase
+        .from('post_upvotes')
+        .select('post_id')
+        .eq('user_id', currentUserId);
+      userUpvotes = data || [];
+    } catch {
+      userUpvotes = getLocalData<any[]>('post_upvotes', []).filter(u => u.user_id === currentUserId);
+    }
+  }
   
   for (const p of dbPosts) {
     const authorProfile = await dbService.getProfile(p.author_id);
@@ -628,6 +790,7 @@ export async function getHydratedPosts(communityId: string): Promise<UIPost[]> {
       : { id: p.author_id, name: 'Anonymous', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80', cohort: 'Member', level: 1, points: 0 };
     
     const comments = await getHydratedComments(p.id);
+    const hasUpvoted = userUpvotes.some(u => u.post_id === p.id);
     
     uiPosts.push({
       id: p.id,
@@ -638,7 +801,8 @@ export async function getHydratedPosts(communityId: string): Promise<UIPost[]> {
       category: p.category,
       timestamp: new Date(p.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' }),
       upvotes: p.upvotes_count || 0,
-      comments
+      comments,
+      hasUpvoted
     });
   }
   
@@ -680,16 +844,40 @@ export async function getHydratedCourses(communityId: string, currentUserId: str
   return uiCourses;
 }
 
-export async function getHydratedEvents(communityId: string): Promise<UICalendarEvent[]> {
+export function formatEventDate(isoString: string): string {
+  const date = new Date(isoString);
+  if (isNaN(date.getTime())) return "Date TBA";
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(date);
+}
+
+export async function getHydratedEvents(communityId: string, currentUserId?: string): Promise<UICalendarEvent[]> {
   const dbEvents = await dbService.listEvents(communityId);
+  
+  let userRsvps: EventRSVP[] = [];
+  if (currentUserId) {
+    try {
+      userRsvps = await dbService.listEventRSVPs(currentUserId);
+    } catch (e) {
+      console.error('Error fetching RSVPs:', e);
+    }
+  }
+
   return dbEvents.map(e => {
+    const hasRSVPed = userRsvps.some(r => r.event_id === e.id);
     return {
       id: e.id,
       communityId: e.community_id,
       title: e.title,
       description: e.description || '',
       date: e.starts_at,
-      time: 'Starts at ' + new Date(e.starts_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      time: formatEventDate(e.starts_at),
       host: {
         id: 'host',
         name: e.host_name,
@@ -699,7 +887,8 @@ export async function getHydratedEvents(communityId: string): Promise<UICalendar
         points: 1200
       },
       zoomUrl: e.meet_url,
-      attendees: e.attendees_count || 0
+      attendees: e.attendees_count || 0,
+      hasRSVPed
     };
   });
 }

@@ -3,12 +3,25 @@ import { Calendar, Clock, Video, User, Check, Users, Plus, X } from 'lucide-reac
 import { motion, AnimatePresence } from 'motion/react';
 import { CalendarEvent } from '../types';
 
+export function formatEventDate(isoString: string): string {
+  const date = new Date(isoString);
+  if (isNaN(date.getTime())) return "Date TBA";
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(date);
+}
+
 interface CalendarTabProps {
   events: CalendarEvent[];
   isAdminOrOwner: boolean;
   onRSVP: (eventId: string) => void;
   onShowNotification: (message: string, type: 'success' | 'info') => void;
-  onAddEvent: (title: string, description: string, date: string, time: string, meetUrl: string) => void;
+  onAddEvent: (title: string, description: string, startsAtIso: string, meetUrl: string) => void;
 }
 
 export const CalendarTab: React.FC<CalendarTabProps> = ({
@@ -21,8 +34,7 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({
   const [showAddEventModal, setShowAddEventModal] = useState(false);
   const [eventTitle, setEventTitle] = useState('');
   const [eventDesc, setEventDesc] = useState('');
-  const [eventDate, setEventDate] = useState('');
-  const [eventTime, setEventTime] = useState('');
+  const [eventDateTime, setEventDateTime] = useState('');
   const [eventUrl, setEventUrl] = useState('https://meet.google.com/abc-defg-hij');
 
   // Determine user's local timezone abbreviation
@@ -45,13 +57,26 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({
 
   const handleCreateEventSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!eventTitle.trim() || !eventDesc.trim() || !eventDate.trim() || !eventTime.trim()) return;
+    if (!eventTitle.trim() || !eventDesc.trim() || !eventDateTime.trim() || !eventUrl.trim()) {
+      onShowNotification('Please fill out all fields.', 'info');
+      return;
+    }
 
-    onAddEvent(eventTitle, eventDesc, eventDate, eventTime, eventUrl);
+    const selectedDate = new Date(eventDateTime);
+    if (isNaN(selectedDate.getTime())) {
+      onShowNotification('Invalid date selected.', 'info');
+      return;
+    }
+
+    if (selectedDate < new Date()) {
+      onShowNotification('Cannot schedule events in the past.', 'info');
+      return;
+    }
+
+    onAddEvent(eventTitle, eventDesc, selectedDate.toISOString(), eventUrl);
     setEventTitle('');
     setEventDesc('');
-    setEventDate('');
-    setEventTime('');
+    setEventDateTime('');
     setEventUrl('https://meet.google.com/abc-defg-hij');
     setShowAddEventModal(false);
   };
@@ -125,8 +150,8 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({
               <div>
                 {/* Event Header Status */}
                 <div className="flex items-start justify-between gap-2 mb-3">
-                  <span className="text-[10px] font-bold bg-zinc-100 text-zinc-700 px-2 py-0.5 rounded-full dark:bg-zinc-900 dark:text-zinc-400">
-                    {event.date}
+                  <span className="text-[10px] font-bold bg-zinc-100 text-zinc-700 px-2.5 py-0.5 rounded-full dark:bg-zinc-900 dark:text-zinc-400">
+                    {formatEventDate(event.date)}
                   </span>
 
                   {event.hasRSVPed && (
@@ -248,30 +273,15 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Date</label>
-                    <input 
-                      type="text" 
-                      required
-                      placeholder="e.g. Wednesday, Sep 17"
-                      value={eventDate}
-                      onChange={(e) => setEventDate(e.target.value)}
-                      className="w-full text-xs font-semibold px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Time Range</label>
-                    <input 
-                      type="text" 
-                      required
-                      placeholder="e.g. 2:00 PM - 3:00 PM"
-                      value={eventTime}
-                      onChange={(e) => setEventTime(e.target.value)}
-                      className="w-full text-xs font-semibold px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
-                    />
-                  </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Event Date & Time</label>
+                  <input 
+                    type="datetime-local" 
+                    required
+                    value={eventDateTime}
+                    onChange={(e) => setEventDateTime(e.target.value)}
+                    className="w-full text-xs font-semibold px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                  />
                 </div>
 
                 <div className="space-y-1.5">

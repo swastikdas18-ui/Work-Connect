@@ -73,7 +73,7 @@ create table if not exists public.events (
   description text,
   host_name text not null,
   host_avatar text,
-  starts_at text not null,
+  starts_at timestamptz not null,
   meet_url text not null,
   attendees_count integer default 0,
   created_at timestamptz default now()
@@ -124,6 +124,24 @@ create table if not exists public.lesson_completions (
   unique (user_id, lesson_id)
 );
 
+-- K. Event RSVPs (Event attendance)
+create table if not exists public.event_rsvps (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid references public.events(id) on delete cascade,
+  user_id uuid references public.profiles(id) on delete cascade,
+  created_at timestamptz default now(),
+  unique (event_id, user_id)
+);
+
+-- L. Post Upvotes (Idempotent post upvoting)
+create table if not exists public.post_upvotes (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid references public.posts(id) on delete cascade not null,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  created_at timestamptz default now(),
+  unique (post_id, user_id)
+);
+
 
 -- ==========================================================
 -- 3. ROW-LEVEL SECURITY (RLS) POLICIES
@@ -138,6 +156,8 @@ alter table public.newsletters enable row level security;
 alter table public.courses enable row level security;
 alter table public.lessons enable row level security;
 alter table public.lesson_completions enable row level security;
+alter table public.event_rsvps enable row level security;
+alter table public.post_upvotes enable row level security;
 
 -- Profiles Policies
 create policy "Allow public read of profiles" on public.profiles for select using (true);
@@ -182,28 +202,71 @@ create policy "Allow admin managing lessons" on public.lessons for all using (au
 create policy "Allow select of completions" on public.lesson_completions for select using (true);
 create policy "Allow user self completion management" on public.lesson_completions for all using (auth.uid() = user_id);
 
+-- Event RSVPs Policies
+create policy "Allow read access to authenticated" on public.event_rsvps for select using (true);
+create policy "Allow user to RSVP" on public.event_rsvps for insert with check (auth.uid() = user_id);
+create policy "Allow user to cancel RSVP" on public.event_rsvps for delete using (auth.uid() = user_id);
+
+-- Post Upvotes Policies
+create policy "Allow select of post upvotes" on public.post_upvotes for select using (true);
+create policy "Allow insert of post upvote" on public.post_upvotes for insert with check (auth.uid() = user_id);
+create policy "Allow delete of post upvote" on public.post_upvotes for delete using (auth.uid() = user_id);
+
 
 -- ==========================================================
 -- 4. AUTOMATIC AUTH -> PROFILE TRIGGER
 -- ==========================================================
 create or replace function public.handle_new_user()
-returns trigger as $$
-begin
-  insert into public.profiles (id, full_name, avatar_url, headline, cohort_tag, karma_points, role)
-  values (
-    new.id,
-    coalesce(new.raw_user_meta_data->>'full_name', substring(new.email from '([^@]+)')),
-    coalesce(new.raw_user_meta_data->>'avatar_url', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80'),
-    coalesce(new.raw_user_meta_data->>'headline', 'Software Engineering Intern'),
-    'Interns Summer 2026',
-    0,
-    coalesce(new.raw_user_meta_data->>'role', 'member')
-  );
-  return new;
-end;
-$$ language plpgsql security definer;
+returns trigger as $$      begin        insert into public.profiles (id, full_name, headline, avatar_url, karma_points)        values (          new.id,          coalesce(new.raw_user_meta_data->>'full_name', 'Member'),          coalesce(new.raw_user_meta_data->>'headline', 'Community Member'),          coalesce(new.raw_user_meta_data->>'avatar_url', null),          0        );        return new;      end;      $$ language plpgsql security definer;
 
-create or replace trigger on_auth_user_created
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+
+-- ==========================================================
+-- 5. ATOMIC IDEMPOTENT UPVOTE TRANSACTION
+-- ==========================================================
+create or replace function public.toggle_post_upvote(target_post_id uuid)
+returns json as $$
+declare
+  calling_user_id uuid;
+  existing_id uuid;
+  current_count integer;
+  action_taken text;
+begin
+  calling_user_id := auth.uid();
+  if calling_user_id is null then
+    return json_build_object('success', false, 'error', 'unauthenticated');
+  end if;
+
+  select id into existing_id 
+  from public.post_upvotes 
+  where post_id = target_post_id and user_id = calling_user_id;
+
+  if existing_id is not null then
+    -- Delete upvote
+    delete from public.post_upvotes where id = existing_id;
+    -- Decrement upvotes_count on posts
+    update public.posts 
+    set upvotes_count = greatest(0, upvotes_count - 1) 
+    where id = target_post_id
+    returning upvotes_count into current_count;
+    action_taken := 'downvoted';
+  else
+    -- Insert upvote
+    insert into public.post_upvotes (post_id, user_id) 
+    values (target_post_id, calling_user_id);
+    -- Increment upvotes_count on posts
+    update public.posts 
+    set upvotes_count = upvotes_count + 1 
+    where id = target_post_id
+    returning upvotes_count into current_count;
+    action_taken := 'upvoted';
+  end if;
+
+  return json_build_object('success', true, 'action', action_taken, 'upvotes_count', current_count);
+end;
+$$ language plpgsql security definer;
 `;

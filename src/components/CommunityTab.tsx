@@ -132,21 +132,25 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
         {/* Central Feed - Generous breathing room, max-width ~700px */}
         <div className="col-span-1 lg:col-span-8 space-y-5 max-w-[700px] mx-auto w-full">
           
-          {/* Streamlined Horizontal Category Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-hide select-none border-b border-zinc-100 dark:border-zinc-900">
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => onSelectCategory(cat)}
-                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
-                  selectedCategory === cat
-                    ? 'bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-950'
-                    : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-900'
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
+          {/* Streamlined Horizontal Category Pills with Fade Indicator */}
+          <div className="relative overflow-hidden border-b border-zinc-100 dark:border-zinc-900">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-2 pr-12 scrollbar-hide select-none">
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => onSelectCategory(cat)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
+                    selectedCategory === cat
+                      ? 'bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-950'
+                      : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-900'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+            {/* Soft Right Edge Fade for Horizontal Scroll Discovery */}
+            <div className="absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-white to-transparent pointer-events-none dark:from-zinc-950" />
           </div>
 
           {/* Clean Composer Trigger Placeholder */}
@@ -163,7 +167,6 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
               <div className="flex-1 text-zinc-400 text-xs font-medium bg-zinc-50 dark:bg-zinc-900/60 rounded-lg px-4 py-2 border border-zinc-100 dark:border-zinc-800">
                 Write a thought, question, or win...
               </div>
-              <span className="text-zinc-300 text-xs hidden sm:block font-medium">Draft Newsletter [ ]</span>
             </div>
           ) : (
             <motion.form 

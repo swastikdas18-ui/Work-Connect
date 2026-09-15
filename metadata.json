@@ -1,0 +1,6 @@
+{
+  "name": "Work Connect",
+  "description": "A modern Skool-like platform and newsletter broadcast studio for employees and interns.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

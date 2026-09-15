@@ -57,11 +57,16 @@ import {
   getHydratedNewsletters, 
   mapProfileToUser, 
   mapCommunityToUI,
-  Profile
+  isSupabaseConfigured,
+  isSupabaseSchemaMissing,
+  onSupabaseSchemaMissing,
+  Profile,
+  Membership
 } from './lib/supabase';
+import { SUPABASE_SETUP_SQL } from './data/setupSql';
 
 export default function App() {
-  const { user, loading: authLoading, isAdminOrOwner, setRole, updateProfile, signUp } = useAuth();
+  const { user, loading: authLoading, signIn, signUp, signOut, setRole, updateProfile } = useAuth();
   
   // Navigation View modes: 'portal' or 'community'
   const [viewMode, setViewMode] = useState<'portal' | 'community'>('portal');
@@ -73,11 +78,19 @@ export default function App() {
   // Database-driven reactive states
   const [dbLoading, setDbLoading] = useState<boolean>(false);
   const [communities, setCommunities] = useState<Community[]>([]);
+  const [memberships, setMemberships] = useState<Membership[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [courses, setCourses] = useState<CourseTrack[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [leaderboardUsers, setLeaderboardUsers] = useState<User[]>([]);
+
+  // Contextual role check: checking if they are the owner/admin of the currently selected community
+  const currentMembership = selectedCommunityId && user
+    ? memberships.find(m => m.community_id === selectedCommunityId)
+    : null;
+  const currentRole = currentMembership ? currentMembership.role : 'member';
+  const isAdminOrOwner = currentRole === 'owner' || currentRole === 'admin' || user?.role === 'admin' || user?.role === 'owner';
 
   // State controls
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -97,6 +110,11 @@ export default function App() {
 
   // Discover filter
   const [discoverFilter, setDiscoverFilter] = useState<'all' | 'public' | 'gated'>('all');
+
+  // Real authentication fields
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const [suEmail, setSuEmail] = useState('');
+  const [suPassword, setSuPassword] = useState('');
 
   // Profile setup wizard state for new users
   const [suName, setSuName] = useState('');
@@ -123,6 +141,41 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  // State to track if live Supabase schema is missing
+  const [schemaMissing, setSchemaMissing] = useState(isSupabaseSchemaMissing);
+
+  useEffect(() => {
+    onSupabaseSchemaMissing(() => {
+      setSchemaMissing(true);
+      showToast('Live database is uninitialized. Running in local sandbox.');
+    });
+  }, []);
+
+  // State to control on-demand auth modal visibility
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
+  // Helper to guard protected actions and prompt login modal if needed
+  const ensureUserAuthenticated = (actionDescription: string): boolean => {
+    if (!user) {
+      setAuthMode('signin');
+      setShowAuthModal(true);
+      showToast(`Please sign in to ${actionDescription}.`);
+      return false;
+    }
+    return true;
+  };
+
+  const generateId = (prefix: string) => {
+    if (isSupabaseConfigured) {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+    return `${prefix}-${Date.now()}`;
+  };
+
   // Pre-defined avatars selection
   const prebuiltAvatars = [
     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80',
@@ -143,15 +196,15 @@ export default function App() {
 
   // Async data loader calling Supabase DB Service
   const loadDatabaseData = async () => {
-    if (!user) return;
     setDbLoading(true);
     try {
       // 1. Get raw communities
       const rawComm = await dbService.listCommunities();
-      const memberships = await dbService.getMemberships(user.id);
+      const userMemberships = user ? await dbService.getMemberships(user.id) : [];
+      setMemberships(userMemberships);
       
       const mappedCommunities = rawComm.map(c => {
-        const isJoined = memberships.some(m => m.community_id === c.id);
+        const isJoined = userMemberships.some(m => m.community_id === c.id);
         return mapCommunityToUI(c, isJoined);
       });
       setCommunities(mappedCommunities);
@@ -161,7 +214,7 @@ export default function App() {
         const activeId = selectedCommunityId;
         const [hydratedPosts, hydratedCourses, hydratedEvents, hydratedNewsletters] = await Promise.all([
           getHydratedPosts(activeId),
-          getHydratedCourses(activeId, user.id),
+          getHydratedCourses(activeId, user ? user.id : 'anonymous'),
           getHydratedEvents(activeId),
           getHydratedNewsletters(activeId)
         ]);
@@ -186,9 +239,7 @@ export default function App() {
 
   // Fetch at boot and when selection switches
   useEffect(() => {
-    if (user) {
-      loadDatabaseData();
-    }
+    loadDatabaseData();
   }, [user, selectedCommunityId]);
 
   // Keyboard shortcut listener for Cmd+K search
@@ -235,10 +286,11 @@ export default function App() {
   // Create community submit
   const handleCreateCommunity = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!ensureUserAuthenticated('create a community')) return;
     if (!newCommName.trim() || !newCommSlug.trim() || !user) return;
 
     try {
-      const commId = `c-${Date.now()}`;
+      const commId = generateId('c');
       const commData = {
         id: commId,
         name: newCommName,
@@ -253,7 +305,7 @@ export default function App() {
       await dbService.createCommunity(commData);
       // Auto join as admin/owner
       await dbService.createMembership({
-        id: `m-${user.id}-${commId}`,
+        id: generateId('m'),
         user_id: user.id,
         community_id: commId,
         role: 'owner',
@@ -278,6 +330,7 @@ export default function App() {
   // Join or Leave community
   const handleJoinOrLeaveCommunity = async (communityId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!ensureUserAuthenticated('join communities')) return;
     if (!user) return;
 
     try {
@@ -291,7 +344,7 @@ export default function App() {
       } else {
         // Join
         await dbService.createMembership({
-          id: `m-${user.id}-${communityId}`,
+          id: generateId('m'),
           user_id: user.id,
           community_id: communityId,
           role: 'member',
@@ -309,6 +362,7 @@ export default function App() {
 
   // Upvote Post Action
   const handleUpvotePost = async (postId: string) => {
+    if (!ensureUserAuthenticated('upvote posts')) return;
     if (!user) return;
     try {
       const postItem = posts.find(p => p.id === postId);
@@ -337,9 +391,10 @@ export default function App() {
 
   // Add Comment Action
   const handleAddComment = async (postId: string, commentText: string) => {
+    if (!ensureUserAuthenticated('add comments')) return;
     if (!user) return;
     try {
-      const cId = `com-${Date.now()}`;
+      const cId = generateId('com');
       await dbService.createComment({
         id: cId,
         post_id: postId,
@@ -360,9 +415,10 @@ export default function App() {
 
   // Add Post Action
   const handleAddPost = async (postData: { title: string; content: string; codeSnippet?: string; category: string }, sendAsNewsletter: boolean) => {
+    if (!ensureUserAuthenticated('publish posts')) return;
     if (!user || !selectedCommunityId) return;
     try {
-      const postId = `p-${Date.now()}`;
+      const postId = generateId('p');
       await dbService.createPost({
         id: postId,
         community_id: selectedCommunityId,
@@ -384,7 +440,7 @@ export default function App() {
 
       // If user wants to draft/broadcast this automatically to the newsletter studio
       if (sendAsNewsletter && isAdminOrOwner) {
-        const bId = `b-${Date.now()}`;
+        const bId = generateId('b');
         await dbService.createNewsletter({
           id: bId,
           community_id: selectedCommunityId,
@@ -409,7 +465,7 @@ export default function App() {
   const handleAddCourse = async (title: string, description: string, bannerColor: string) => {
     if (!selectedCommunityId || !user) return;
     try {
-      const courseId = `course-${Date.now()}`;
+      const courseId = generateId('course');
       await dbService.createCourse({
         id: courseId,
         community_id: selectedCommunityId,
@@ -420,7 +476,7 @@ export default function App() {
 
       // Create a default first lesson
       await dbService.createLesson({
-        id: `lesson-${Date.now()}`,
+        id: generateId('lesson'),
         course_id: courseId,
         title: '01: Cohort Standard Onboarding',
         duration: '12 mins',
@@ -465,7 +521,7 @@ export default function App() {
   const handleAddEvent = async (title: string, description: string, date: string, time: string, meetUrl: string) => {
     if (!selectedCommunityId || !user) return;
     try {
-      const eId = `evt-${Date.now()}`;
+      const eId = generateId('evt');
       await dbService.createEvent({
         id: eId,
         community_id: selectedCommunityId,
@@ -494,7 +550,7 @@ export default function App() {
   const handleAddBroadcast = async (broadcastData: { subject: string; cohort: string; content: string }) => {
     if (!selectedCommunityId || !user) return;
     try {
-      const bId = `b-${Date.now()}`;
+      const bId = generateId('b');
       await dbService.createNewsletter({
         id: bId,
         community_id: selectedCommunityId,
@@ -519,11 +575,31 @@ export default function App() {
     showToast('Loaded curated snippet inside Studio composer.');
   };
 
-  const handleSignupSubmit = async (e: React.FormEvent) => {
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!suName.trim()) return;
-    await signUp(suName, suHeadline || 'Intern', suAvatar, suRole);
-    showToast('Welcome to Work Connect! Profile generated.');
+    if (!suEmail.trim() || !suPassword.trim()) {
+      showToast('Please enter both email and password.');
+      return;
+    }
+
+    try {
+      if (authMode === 'signin') {
+        await signIn(suEmail, suPassword);
+        showToast('Successfully signed in!');
+      } else {
+        if (!suName.trim()) {
+          showToast('Please provide your full name for sign up.');
+          return;
+        }
+        const computedAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(suName)}&background=6366f1&color=fff&size=128`;
+        await signUp(suEmail, suPassword, suName, suHeadline || 'Intern', computedAvatar, 'member');
+        showToast('Welcome! Your profile has been created.');
+      }
+      setShowAuthModal(false);
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || 'Authentication transaction failed.');
+    }
   };
 
   const handleProfileUpdateSubmit = async (e: React.FormEvent) => {
@@ -548,132 +624,70 @@ export default function App() {
     );
   }
 
-  // Render Auth Setup if user session doesn't exist
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center p-4">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 shadow-2xl max-w-md w-full space-y-6"
-        >
-          <div className="text-center space-y-2">
-            <div className="h-12 w-12 rounded-2xl bg-indigo-500 text-white flex items-center justify-center mx-auto shadow-md">
-              <Sparkles className="h-6 w-6" />
-            </div>
-            <h2 className="text-xl font-extrabold tracking-tight text-zinc-900 dark:text-white">Welcome to Work Connect</h2>
-            <p className="text-xs text-zinc-500">Configure your profile identity and choose your role to begin.</p>
-          </div>
-
-          <form onSubmit={handleSignupSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Full Name</label>
-              <input 
-                type="text" 
-                required
-                placeholder="e.g. Alex Rivera"
-                value={suName}
-                onChange={(e) => setSuName(e.target.value)}
-                className="w-full text-xs font-semibold px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Headline / Cohort Title</label>
-              <input 
-                type="text" 
-                placeholder="e.g. Software Engineering Intern"
-                value={suHeadline}
-                onChange={(e) => setSuHeadline(e.target.value)}
-                className="w-full text-xs font-semibold px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Choose Role & Permissions Mode</label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { role: 'member', label: 'Member', desc: 'Standard Access' },
-                  { role: 'admin', label: 'Admin', desc: 'Write & Edit' },
-                  { role: 'owner', label: 'Owner', desc: 'Full Authority' }
-                ].map((item) => (
-                  <button
-                    key={item.role}
-                    type="button"
-                    onClick={() => setSuRole(item.role as any)}
-                    className={`p-3 border rounded-xl text-center transition-all ${
-                      suRole === item.role
-                        ? 'border-indigo-600 bg-indigo-50/20 text-indigo-700 dark:border-indigo-500 dark:text-indigo-400 dark:bg-zinc-850'
-                        : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300'
-                    }`}
-                  >
-                    <span className="text-xs font-bold block">{item.label}</span>
-                    <span className="text-[8px] text-zinc-400 mt-0.5 block leading-tight">{item.desc}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Select Avatar</label>
-              <div className="flex items-center gap-2 justify-center py-2">
-                {prebuiltAvatars.map((av) => (
-                  <button
-                    key={av}
-                    type="button"
-                    onClick={() => setSuAvatar(av)}
-                    className={`h-10 w-10 rounded-full overflow-hidden border-2 transition-all ${
-                      suAvatar === av ? 'border-indigo-500 scale-110 shadow' : 'border-transparent opacity-70 hover:opacity-100'
-                    }`}
-                  >
-                    <img src={av} alt="avatar option" className="h-full w-full object-cover" />
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-3 rounded-xl shadow-lg transition-all"
-            >
-              Sign Up & Join Workspace
-            </button>
-          </form>
-        </motion.div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 flex flex-col font-sans select-none antialiased">
       
       {/* Dynamic Role Tester Banner (Visual Proof of RBAC Gating) */}
-      <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center flex items-center justify-center gap-3 text-xs font-bold text-amber-700 dark:text-amber-400">
-        <div className="flex items-center gap-1">
-          <ShieldAlert className="h-4 w-4" />
-          <span>Role Simulator: Currently testing as <strong className="uppercase font-extrabold">{user.role}</strong></span>
+      {user && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center flex items-center justify-center gap-3 text-xs font-bold text-amber-700 dark:text-amber-400">
+          <div className="flex items-center gap-1">
+            <ShieldAlert className="h-4 w-4" />
+            <span>Role Simulator: Currently testing as <strong className="uppercase font-extrabold">{user.role}</strong></span>
+          </div>
+          <div className="flex items-center bg-white/40 dark:bg-zinc-900/60 p-0.5 rounded-lg border border-amber-500/30">
+            <button 
+              onClick={() => { setRole('member'); showToast('Role toggled to Member.'); }}
+              className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${user.role === 'member' ? 'bg-amber-500 text-white' : 'text-zinc-500'}`}
+            >
+              Member
+            </button>
+            <button 
+              onClick={() => { setRole('admin'); showToast('Role toggled to Admin.'); }}
+              className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${user.role === 'admin' ? 'bg-amber-500 text-white' : 'text-zinc-500'}`}
+            >
+              Admin
+            </button>
+            <button 
+              onClick={() => { setRole('owner'); showToast('Role toggled to Owner.'); }}
+              className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${user.role === 'owner' ? 'bg-amber-500 text-white' : 'text-zinc-500'}`}
+            >
+              Owner
+            </button>
+          </div>
         </div>
-        <div className="flex items-center bg-white/40 dark:bg-zinc-900/60 p-0.5 rounded-lg border border-amber-500/30">
-          <button 
-            onClick={() => { setRole('member'); showToast('Role toggled to Member.'); }}
-            className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${user.role === 'member' ? 'bg-amber-500 text-white' : 'text-zinc-500'}`}
-          >
-            Member
-          </button>
-          <button 
-            onClick={() => { setRole('admin'); showToast('Role toggled to Admin.'); }}
-            className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${user.role === 'admin' ? 'bg-amber-500 text-white' : 'text-zinc-500'}`}
-          >
-            Admin
-          </button>
-          <button 
-            onClick={() => { setRole('owner'); showToast('Role toggled to Owner.'); }}
-            className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${user.role === 'owner' ? 'bg-amber-500 text-white' : 'text-zinc-500'}`}
-          >
-            Owner
-          </button>
+      )}
+
+      {/* Supabase Schema Missing Resilient Fallback Banner */}
+      {schemaMissing && (
+        <div className="bg-indigo-600/10 border-b border-indigo-500/20 px-4 py-3 text-xs text-indigo-950 dark:text-indigo-300">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3 font-semibold">
+            <div className="flex items-center gap-2">
+              <span className="flex h-2 w-2 rounded-full bg-indigo-500 animate-ping" />
+              <span>
+                ⚡ <strong>Supabase Connected (Sandbox Mode Active)</strong>: We detected that your Supabase tables haven't been created yet. The app remains fully functional using an automatic Local Storage fallback.
+              </span>
+            </div>
+            <div className="flex items-center gap-2 self-end md:self-auto">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(SUPABASE_SETUP_SQL);
+                  showToast('Supabase SQL Setup script copied to clipboard!');
+                }}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-xs transition-all flex items-center gap-1.5"
+              >
+                <CheckCircle className="h-3.5 w-3.5" />
+                <span>Copy Setup SQL</span>
+              </button>
+              <button
+                onClick={() => setSchemaMissing(false)}
+                className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-200 text-[10px] font-bold px-2 py-1.5"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Global Header Layout */}
       <header className="sticky top-0 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md border-b border-zinc-200/60 dark:border-zinc-900/80 z-40 px-4 h-15 flex items-center shadow-xs">
@@ -772,59 +786,61 @@ export default function App() {
               <Search className="h-4 w-4" />
             </button>
 
-            {/* Notification Drawer trigger */}
-            <div className="relative">
-              <button 
-                onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
-                className="p-2 rounded-lg bg-zinc-50 border border-zinc-100 hover:bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:border-zinc-800 dark:hover:bg-zinc-850 relative"
-              >
-                <Bell className="h-4 w-4" />
-                {appNotifications.some(n => !n.read) && (
-                  <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-rose-500" />
-                )}
-              </button>
+            {/* Notification Drawer trigger (only for logged in users) */}
+            {user ? (
+              <div className="relative">
+                <button 
+                  onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
+                  className="p-2 rounded-lg bg-zinc-50 border border-zinc-100 hover:bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:border-zinc-800 dark:hover:bg-zinc-850 relative"
+                >
+                  <Bell className="h-4 w-4" />
+                  {appNotifications.some(n => !n.read) && (
+                    <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-rose-500" />
+                  )}
+                </button>
 
-              <AnimatePresence>
-                {showNotificationDropdown && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={() => setShowNotificationDropdown(false)} />
-                    <motion.div 
-                      initial={{ opacity: 0, y: 5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 5 }}
-                      className="absolute right-0 mt-2 w-72 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-20 overflow-hidden"
-                    >
-                      <div className="p-3 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50/50 dark:bg-zinc-900/50">
-                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Alerts</span>
-                        <button 
-                          onClick={() => {
-                            setAppNotifications(prev => prev.map(n => ({ ...n, read: true })));
-                            showToast('All notifications marked read.');
-                          }}
-                          className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400"
-                        >
-                          Mark read
-                        </button>
-                      </div>
-
-                      <div className="max-h-64 overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800">
-                        {appNotifications.map((notif) => (
-                          <div 
-                            key={notif.id} 
-                            className={`p-3 text-xs leading-normal ${
-                              notif.read ? 'bg-white dark:bg-zinc-900 text-zinc-500' : 'bg-indigo-50/10 dark:bg-zinc-900/40 text-zinc-800 dark:text-zinc-200 font-medium'
-                            }`}
+                <AnimatePresence>
+                  {showNotificationDropdown && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setShowNotificationDropdown(false)} />
+                      <motion.div 
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 5 }}
+                        className="absolute right-0 mt-2 w-72 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-20 overflow-hidden"
+                      >
+                        <div className="p-3 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50/50 dark:bg-zinc-900/50">
+                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Alerts</span>
+                          <button 
+                            onClick={() => {
+                              setAppNotifications(prev => prev.map(n => ({ ...n, read: true })));
+                              showToast('All notifications marked read.');
+                            }}
+                            className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400"
                           >
-                            <p>{notif.text}</p>
-                            <span className="text-[10px] text-zinc-400 mt-1 block font-mono">{notif.time}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </motion.div>
-                  </>
-                )}
-              </AnimatePresence>
-            </div>
+                            Mark read
+                          </button>
+                        </div>
+
+                        <div className="max-h-64 overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800">
+                          {appNotifications.map((notif) => (
+                            <div 
+                              key={notif.id} 
+                              className={`p-3 text-xs leading-normal ${
+                                notif.read ? 'bg-white dark:bg-zinc-900 text-zinc-500' : 'bg-indigo-50/10 dark:bg-zinc-900/40 text-zinc-800 dark:text-zinc-200 font-medium'
+                              }`}
+                            >
+                              <p>{notif.text}</p>
+                              <span className="text-[10px] text-zinc-400 mt-1 block font-mono">{notif.time}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+            ) : null}
 
             {/* PWA Direct trigger */}
             {isInstallable && (
@@ -836,19 +852,42 @@ export default function App() {
               </button>
             )}
 
-            {/* Profile Level Widget with Edit Profile Trigger */}
-            <div className="flex items-center gap-2 cursor-pointer" onClick={() => setShowProfileModal(true)}>
-              <div className="relative">
-                <img 
-                  src={mappedCurrentUser.avatar} 
-                  alt={mappedCurrentUser.name} 
-                  className="w-7.5 h-7.5 rounded-full object-cover border border-zinc-200 dark:border-zinc-800 hover:scale-105 transition-transform"
-                />
-                <span className="absolute -bottom-1 -right-1 bg-amber-500 text-white text-[8px] font-bold h-3.5 w-3.5 rounded-full flex items-center justify-center border border-white dark:border-zinc-900">
-                  {mappedCurrentUser.level}
-                </span>
+            {/* Profile Level Widget with Edit Profile Trigger OR Sign In Action */}
+            {user ? (
+              <div className="flex items-center gap-2 cursor-pointer" onClick={() => setShowProfileModal(true)}>
+                <div className="relative">
+                  <img 
+                    src={mappedCurrentUser.avatar} 
+                    alt={mappedCurrentUser.name} 
+                    className="w-7.5 h-7.5 rounded-full object-cover border border-zinc-200 dark:border-zinc-800 hover:scale-105 transition-transform"
+                  />
+                  <span className="absolute -bottom-1 -right-1 bg-amber-500 text-white text-[8px] font-bold h-3.5 w-3.5 rounded-full flex items-center justify-center border border-white dark:border-zinc-900">
+                    {mappedCurrentUser.level}
+                  </span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setAuthMode('signin');
+                    setShowAuthModal(true);
+                  }}
+                  className="px-3.5 py-1.5 text-xs font-bold text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
+                >
+                  Sign In
+                </button>
+                <button
+                  onClick={() => {
+                    setAuthMode('signup');
+                    setShowAuthModal(true);
+                  }}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-xs transition-all"
+                >
+                  Get Started
+                </button>
+              </div>
+            )}
 
           </div>
 
@@ -1087,6 +1126,31 @@ export default function App() {
               transition={{ duration: 0.15 }}
               className="space-y-4"
             >
+              
+              {!user && (
+                <div className="bg-amber-50/50 border border-amber-200/60 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 dark:bg-amber-950/10 dark:border-amber-900/30">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-amber-500/10 text-amber-600 rounded-xl dark:bg-amber-500/20 dark:text-amber-400 shrink-0">
+                      <Sparkles className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-amber-800 dark:text-amber-300">You are exploring as a Guest</p>
+                      <p className="text-xs text-amber-600/90 dark:text-amber-400/80 mt-0.5 leading-normal">
+                        Sign in or register an account to interact in this community, upvote insights, enroll in classes, RSVP to events, or start your own workspace.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setAuthMode('signin');
+                      setShowAuthModal(true);
+                    }}
+                    className="shrink-0 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-xs transition-all w-full sm:w-auto text-center font-semibold"
+                  >
+                    Authenticate Account
+                  </button>
+                </div>
+              )}
               
               {/* Active Tab Panel */}
               {activeTab === 'feed' && (
@@ -1532,6 +1596,151 @@ export default function App() {
             <CheckCircle className="h-4 w-4 text-emerald-400" />
             <span>{toastMessage}</span>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ON-DEMAND AUTH MODAL */}
+      <AnimatePresence>
+        {showAuthModal && (
+          <>
+            <div className="fixed inset-0 bg-black/60 z-50 backdrop-blur-xs" onClick={() => setShowAuthModal(false)} />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: '-45%', x: '-50%' }}
+              animate={{ opacity: 1, scale: 1, y: '-50%', x: '-50%' }}
+              exit={{ opacity: 0, scale: 0.95, y: '-45%', x: '-50%' }}
+              className="fixed top-1/2 left-1/2 w-[92%] max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-2xl z-50 space-y-5 overflow-y-auto max-h-[85vh]"
+            >
+              <div className="text-center space-y-1 relative">
+                <button 
+                  onClick={() => setShowAuthModal(false)}
+                  className="absolute -top-1 -right-1 p-1.5 rounded-lg text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all"
+                >
+                  <X className="h-4.5 w-4.5" />
+                </button>
+                <div className="h-10 w-10 rounded-xl bg-indigo-500 text-white flex items-center justify-center mx-auto shadow-md">
+                  <Sparkles className="h-5.5 w-5.5" />
+                </div>
+                <h2 className="text-lg font-extrabold tracking-tight text-zinc-900 dark:text-white mt-2">Welcome to Work Connect</h2>
+                <p className="text-[11px] text-zinc-500">Connect with cohorts, exchange insights, and milestones.</p>
+                
+                <div className="pt-1">
+                  {isSupabaseConfigured ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-200/50">
+                      <span className="h-1 w-1 rounded-full bg-emerald-500 animate-pulse" />
+                      Live Supabase Server Active
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-extrabold bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 border border-amber-200/50">
+                      <span className="h-1 w-1 rounded-full bg-amber-500 animate-pulse" />
+                      Offline Sandbox Mode Active
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Tab Selector */}
+              <div className="flex bg-zinc-100 p-1 rounded-xl dark:bg-zinc-800">
+                <button
+                  onClick={() => setAuthMode('signin')}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    authMode === 'signin'
+                      ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-700 dark:text-zinc-50'
+                      : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400'
+                  }`}
+                >
+                  Sign In
+                </button>
+                <button
+                  onClick={() => setAuthMode('signup')}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    authMode === 'signup'
+                      ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-700 dark:text-zinc-50'
+                      : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400'
+                  }`}
+                >
+                  Sign Up
+                </button>
+              </div>
+
+              <form onSubmit={handleAuthSubmit} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Email Address</label>
+                  <input 
+                    type="email" 
+                    required
+                    placeholder="e.g. alex@company.com"
+                    value={suEmail}
+                    onChange={(e) => setSuEmail(e.target.value)}
+                    className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Password</label>
+                  <input 
+                    type="password" 
+                    required
+                    placeholder="••••••••"
+                    value={suPassword}
+                    onChange={(e) => setSuPassword(e.target.value)}
+                    className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                  />
+                </div>
+
+                {authMode === 'signup' && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="space-y-4 pt-2 border-t border-zinc-100 dark:border-zinc-800"
+                  >
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Full Name</label>
+                      <input 
+                        type="text" 
+                        required={authMode === 'signup'}
+                        placeholder="e.g. Alex Rivera"
+                        value={suName}
+                        onChange={(e) => setSuName(e.target.value)}
+                        className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Headline / Title</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. Software Engineering Intern"
+                        value={suHeadline}
+                        onChange={(e) => setSuHeadline(e.target.value)}
+                        className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                      />
+                    </div>
+                  </motion.div>
+                )}
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-xl shadow-lg transition-all"
+                  >
+                    {authMode === 'signin' ? 'Sign In' : 'Create Account'}
+                  </button>
+                </div>
+
+                <div className="text-center pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
+                    className="text-xs text-indigo-600 hover:text-indigo-700 font-bold dark:text-indigo-400 dark:hover:text-indigo-300 transition-all"
+                  >
+                    {authMode === 'signin' 
+                      ? "Don't have an account? Sign Up" 
+                      : "Already have an account? Sign In"}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
 

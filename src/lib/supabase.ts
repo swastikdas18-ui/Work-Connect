@@ -130,477 +130,431 @@ const setLocalData = <T>(key: string, val: T): void => {
   } catch {}
 };
 
-// Initial state is strictly clean and empty as requested
-const initialLocalDB = {
-  profiles: [] as Profile[],
-  communities: [] as Community[],
-  memberships: [] as Membership[],
-  posts: [] as Post[],
-  comments: [] as Comment[],
-  events: [] as Event[],
-  newsletters: [] as Newsletter[],
-  courses: [] as Course[],
-  lessons: [] as Lesson[],
-  lessonCompletions: [] as LessonCompletion[]
-};
+// State to track if Supabase schema is missing/uninitialized
+export let isSupabaseSchemaMissing = false;
+let onSchemaMissingCallback: (() => void) | null = null;
+
+export function onSupabaseSchemaMissing(callback: () => void) {
+  onSchemaMissingCallback = callback;
+}
+
+export function triggerSchemaMissing() {
+  if (!isSupabaseSchemaMissing) {
+    isSupabaseSchemaMissing = true;
+    console.warn("Detected missing Supabase schema tables. Switching to high-fidelity Local Storage sandbox...");
+    if (onSchemaMissingCallback) {
+      onSchemaMissingCallback();
+    }
+  }
+}
+
+// Universal call wrapper to intercept PostgREST 205 (Could not find table) or relation does not exist errors
+async function wrapDbCall<T>(
+  supabaseCall: () => PromiseLike<{ data: any; error: any }> | any, 
+  localFallback: () => T | Promise<T>
+): Promise<T> {
+  if (isSupabaseConfigured && !isSupabaseSchemaMissing) {
+    try {
+      const { data, error } = await supabaseCall();
+      if (error) {
+        if (
+          error.code === 'PGRST205' || 
+          error.message?.includes("Could not find") || 
+          error.message?.includes("schema cache") || 
+          (error.message?.includes("relation") && error.message?.includes("does not exist"))
+        ) {
+          triggerSchemaMissing();
+          return await localFallback();
+        }
+        throw error;
+      }
+      return data;
+    } catch (err: any) {
+      if (
+        err?.code === 'PGRST205' || 
+        err?.message?.includes("Could not find") || 
+        err?.message?.includes("schema cache") || 
+        (err?.message?.includes("relation") && err?.message?.includes("does not exist"))
+      ) {
+        triggerSchemaMissing();
+        return await localFallback();
+      }
+      console.error("Database query failed, falling back to Local Storage Sandbox:", err);
+      return await localFallback();
+    }
+  }
+  return await localFallback();
+}
 
 // Database Service Layer with dual Support: Real Supabase API calls & Local Fallback
 export const dbService = {
   // Profiles
   async getProfile(userId: string): Promise<Profile | null> {
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-      if (error) return null;
-      return data;
-    } else {
-      const profiles = getLocalData<Profile[]>('profiles', []);
-      return profiles.find(p => p.id === userId) || null;
-    }
+    return wrapDbCall(
+      () => supabase.from('profiles').select('*').eq('id', userId).single(),
+      () => {
+        const profiles = getLocalData<Profile[]>('profiles', []);
+        return profiles.find(p => p.id === userId) || null;
+      }
+    );
   },
 
   async upsertProfile(profile: Profile): Promise<Profile> {
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('profiles')
-        .upsert(profile)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    } else {
-      const profiles = getLocalData<Profile[]>('profiles', []);
-      const index = profiles.findIndex(p => p.id === profile.id);
-      if (index >= 0) {
-        profiles[index] = profile;
-      } else {
-        profiles.push(profile);
+    return wrapDbCall(
+      () => supabase.from('profiles').upsert(profile).select().single(),
+      () => {
+        const profiles = getLocalData<Profile[]>('profiles', []);
+        const index = profiles.findIndex(p => p.id === profile.id);
+        if (index >= 0) {
+          profiles[index] = profile;
+        } else {
+          profiles.push(profile);
+        }
+        setLocalData('profiles', profiles);
+        return profile;
       }
-      setLocalData('profiles', profiles);
-      return profile;
-    }
+    );
   },
 
   async getLeaderboard(): Promise<Profile[]> {
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('karma_points', { ascending: false });
-      if (error) return [];
-      return data || [];
-    } else {
-      const profiles = getLocalData<Profile[]>('profiles', []);
-      return [...profiles].sort((a, b) => b.karma_points - a.karma_points);
-    }
+    return wrapDbCall(
+      () => supabase.from('profiles').select('*').order('karma_points', { ascending: false }),
+      () => {
+        const profiles = getLocalData<Profile[]>('profiles', []);
+        return [...profiles].sort((a, b) => b.karma_points - a.karma_points);
+      }
+    );
   },
 
   // Communities
   async listCommunities(): Promise<Community[]> {
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('communities')
-        .select('*');
-      if (error) return [];
-      return data || [];
-    } else {
-      return getLocalData<Community[]>('communities', []);
-    }
+    return wrapDbCall(
+      () => supabase.from('communities').select('*'),
+      () => getLocalData<Community[]>('communities', [])
+    );
   },
 
   async createCommunity(community: Community): Promise<Community> {
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('communities')
-        .insert(community)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    } else {
-      const communities = getLocalData<Community[]>('communities', []);
-      communities.push(community);
-      setLocalData('communities', communities);
-      return community;
-    }
+    return wrapDbCall(
+      () => supabase.from('communities').insert(community).select().single(),
+      () => {
+        const communities = getLocalData<Community[]>('communities', []);
+        communities.push(community);
+        setLocalData('communities', communities);
+        return community;
+      }
+    );
   },
 
   // Memberships
   async getMemberships(userId: string): Promise<Membership[]> {
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('memberships')
-        .select('*')
-        .eq('user_id', userId);
-      if (error) return [];
-      return data || [];
-    } else {
-      const memberships = getLocalData<Membership[]>('memberships', []);
-      return memberships.filter(m => m.user_id === userId);
-    }
+    return wrapDbCall(
+      () => supabase.from('memberships').select('*').eq('user_id', userId),
+      () => {
+        const memberships = getLocalData<Membership[]>('memberships', []);
+        return memberships.filter(m => m.user_id === userId);
+      }
+    );
   },
 
   async createMembership(membership: Membership): Promise<Membership> {
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('memberships')
-        .insert(membership)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    } else {
-      const memberships = getLocalData<Membership[]>('memberships', []);
-      memberships.push(membership);
-      setLocalData('memberships', memberships);
+    return wrapDbCall(
+      () => supabase.from('memberships').insert(membership).select().single(),
+      () => {
+        const memberships = getLocalData<Membership[]>('memberships', []);
+        memberships.push(membership);
+        setLocalData('memberships', memberships);
 
-      // Increment community member count
-      const communities = getLocalData<Community[]>('communities', []);
-      const commIdx = communities.findIndex(c => c.id === membership.community_id);
-      if (commIdx >= 0) {
-        communities[commIdx].member_count += 1;
-        setLocalData('communities', communities);
+        // Increment community member count
+        const communities = getLocalData<Community[]>('communities', []);
+        const commIdx = communities.findIndex(c => c.id === membership.community_id);
+        if (commIdx >= 0) {
+          communities[commIdx].member_count += 1;
+          setLocalData('communities', communities);
+        }
+        return membership;
       }
-      return membership;
-    }
+    );
   },
 
   async deleteMembership(userId: string, communityId: string): Promise<void> {
-    if (isSupabaseConfigured) {
-      await supabase
-        .from('memberships')
-        .delete()
-        .eq('user_id', userId)
-        .eq('community_id', communityId);
-    } else {
-      const memberships = getLocalData<Membership[]>('memberships', []);
-      const filtered = memberships.filter(m => !(m.user_id === userId && m.community_id === communityId));
-      setLocalData('memberships', filtered);
+    return wrapDbCall(
+      () => supabase.from('memberships').delete().eq('user_id', userId).eq('community_id', communityId),
+      () => {
+        const memberships = getLocalData<Membership[]>('memberships', []);
+        const filtered = memberships.filter(m => !(m.user_id === userId && m.community_id === communityId));
+        setLocalData('memberships', filtered);
 
-      // Decrement community member count
-      const communities = getLocalData<Community[]>('communities', []);
-      const commIdx = communities.findIndex(c => c.id === communityId);
-      if (commIdx >= 0) {
-        communities[commIdx].member_count = Math.max(0, communities[commIdx].member_count - 1);
-        setLocalData('communities', communities);
+        // Decrement community member count
+        const communities = getLocalData<Community[]>('communities', []);
+        const commIdx = communities.findIndex(c => c.id === communityId);
+        if (commIdx >= 0) {
+          communities[commIdx].member_count = Math.max(0, communities[commIdx].member_count - 1);
+          setLocalData('communities', communities);
+        }
       }
-    }
+    );
   },
 
   // Posts
   async listPosts(communityId: string): Promise<Post[]> {
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('posts')
-        .select('*')
-        .eq('community_id', communityId)
-        .order('created_at', { ascending: false });
-      if (error) return [];
-      return data || [];
-    } else {
-      const posts = getLocalData<Post[]>('posts', []);
-      return posts.filter(p => p.community_id === communityId)
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    }
+    return wrapDbCall(
+      () => supabase.from('posts').select('*').eq('community_id', communityId).order('created_at', { ascending: false }),
+      () => {
+        const posts = getLocalData<Post[]>('posts', []);
+        return posts.filter(p => p.community_id === communityId)
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      }
+    );
   },
 
   async createPost(post: Post): Promise<Post> {
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('posts')
-        .insert(post)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    } else {
-      const posts = getLocalData<Post[]>('posts', []);
-      posts.push(post);
-      setLocalData('posts', posts);
-      return post;
-    }
+    return wrapDbCall(
+      () => supabase.from('posts').insert(post).select().single(),
+      () => {
+        const posts = getLocalData<Post[]>('posts', []);
+        posts.push(post);
+        setLocalData('posts', posts);
+        return post;
+      }
+    );
   },
 
   async updatePostUpvotes(postId: string, increment: number): Promise<void> {
-    if (isSupabaseConfigured) {
-      // In a real environment, you'd increment or use a RPC
-      const { data } = await supabase
-        .from('posts')
-        .select('upvotes_count')
-        .eq('id', postId)
-        .single();
-      if (data) {
-        await supabase
+    return wrapDbCall(
+      async () => {
+        const { data, error: selectErr } = await supabase
           .from('posts')
-          .update({ upvotes_count: (data.upvotes_count || 0) + increment })
+          .select('upvotes_count')
+          .eq('id', postId)
+          .single();
+        if (selectErr) return { data: null, error: selectErr };
+        const currentCount = data?.upvotes_count || 0;
+        return supabase
+          .from('posts')
+          .update({ upvotes_count: currentCount + increment })
           .eq('id', postId);
+      },
+      () => {
+        const posts = getLocalData<Post[]>('posts', []);
+        const index = posts.findIndex(p => p.id === postId);
+        if (index >= 0) {
+          posts[index].upvotes_count += increment;
+          setLocalData('posts', posts);
+        }
       }
-    } else {
-      const posts = getLocalData<Post[]>('posts', []);
-      const index = posts.findIndex(p => p.id === postId);
-      if (index >= 0) {
-        posts[index].upvotes_count += increment;
-        setLocalData('posts', posts);
-      }
-    }
+    );
   },
 
   // Comments
   async listComments(postId: string): Promise<Comment[]> {
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('comments')
-        .select('*')
-        .eq('post_id', postId)
-        .order('created_at', { ascending: true });
-      if (error) return [];
-      return data || [];
-    } else {
-      const comments = getLocalData<Comment[]>('comments', []);
-      return comments.filter(c => c.post_id === postId)
-        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-    }
+    return wrapDbCall(
+      () => supabase.from('comments').select('*').eq('post_id', postId).order('created_at', { ascending: true }),
+      () => {
+        const comments = getLocalData<Comment[]>('comments', []);
+        return comments.filter(c => c.post_id === postId)
+          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      }
+    );
   },
 
   async createComment(comment: Comment): Promise<Comment> {
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('comments')
-        .insert(comment)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    } else {
-      const comments = getLocalData<Comment[]>('comments', []);
-      comments.push(comment);
-      setLocalData('comments', comments);
+    return wrapDbCall(
+      () => supabase.from('comments').insert(comment).select().single(),
+      () => {
+        const comments = getLocalData<Comment[]>('comments', []);
+        comments.push(comment);
+        setLocalData('comments', comments);
 
-      // Increment post comments_count
-      const posts = getLocalData<Post[]>('posts', []);
-      const postIdx = posts.findIndex(p => p.id === comment.post_id);
-      if (postIdx >= 0) {
-        posts[postIdx].comments_count += 1;
-        setLocalData('posts', posts);
+        // Increment post comments_count
+        const posts = getLocalData<Post[]>('posts', []);
+        const postIdx = posts.findIndex(p => p.id === comment.post_id);
+        if (postIdx >= 0) {
+          posts[postIdx].comments_count += 1;
+          setLocalData('posts', posts);
+        }
+        return comment;
       }
-      return comment;
-    }
+    );
   },
 
   // Events
   async listEvents(communityId: string): Promise<Event[]> {
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('events')
-        .select('*')
-        .eq('community_id', communityId)
-        .order('starts_at', { ascending: true });
-      if (error) return [];
-      return data || [];
-    } else {
-      const events = getLocalData<Event[]>('events', []);
-      return events.filter(e => e.community_id === communityId)
-        .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
-    }
+    return wrapDbCall(
+      () => supabase.from('events').select('*').eq('community_id', communityId).order('starts_at', { ascending: true }),
+      () => {
+        const events = getLocalData<Event[]>('events', []);
+        return events.filter(e => e.community_id === communityId)
+          .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
+      }
+    );
   },
 
   async createEvent(event: Event): Promise<Event> {
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('events')
-        .insert(event)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    } else {
-      const events = getLocalData<Event[]>('events', []);
-      events.push(event);
-      setLocalData('events', events);
-      return event;
-    }
+    return wrapDbCall(
+      () => supabase.from('events').insert(event).select().single(),
+      () => {
+        const events = getLocalData<Event[]>('events', []);
+        events.push(event);
+        setLocalData('events', events);
+        return event;
+      }
+    );
   },
 
   async rsvpEvent(eventId: string, increment: number): Promise<void> {
-    if (isSupabaseConfigured) {
-      const { data } = await supabase
-        .from('events')
-        .select('attendees_count')
-        .eq('id', eventId)
-        .single();
-      if (data) {
-        await supabase
+    return wrapDbCall(
+      async () => {
+        const { data, error: selectErr } = await supabase
           .from('events')
-          .update({ attendees_count: (data.attendees_count || 0) + increment })
+          .select('attendees_count')
+          .eq('id', eventId)
+          .single();
+        if (selectErr) return { data: null, error: selectErr };
+        const currentCount = data?.attendees_count || 0;
+        return supabase
+          .from('events')
+          .update({ attendees_count: currentCount + increment })
           .eq('id', eventId);
+      },
+      () => {
+        const events = getLocalData<Event[]>('events', []);
+        const index = events.findIndex(e => e.id === eventId);
+        if (index >= 0) {
+          events[index].attendees_count += increment;
+          setLocalData('events', events);
+        }
       }
-    } else {
-      const events = getLocalData<Event[]>('events', []);
-      const index = events.findIndex(e => e.id === eventId);
-      if (index >= 0) {
-        events[index].attendees_count += increment;
-        setLocalData('events', events);
-      }
-    }
+    );
   },
 
   // Newsletters
   async listNewsletters(communityId: string): Promise<Newsletter[]> {
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('newsletters')
-        .select('*')
-        .eq('community_id', communityId)
-        .order('sent_at', { ascending: false });
-      if (error) return [];
-      return data || [];
-    } else {
-      const newsletters = getLocalData<Newsletter[]>('newsletters', []);
-      return newsletters.filter(n => n.community_id === communityId);
-    }
+    return wrapDbCall(
+      () => supabase.from('newsletters').select('*').eq('community_id', communityId).order('sent_at', { ascending: false }),
+      () => {
+        const newsletters = getLocalData<Newsletter[]>('newsletters', []);
+        return newsletters.filter(n => n.community_id === communityId);
+      }
+    );
   },
 
   async createNewsletter(newsletter: Newsletter): Promise<Newsletter> {
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('newsletters')
-        .insert(newsletter)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    } else {
-      const newsletters = getLocalData<Newsletter[]>('newsletters', []);
-      newsletters.push(newsletter);
-      setLocalData('newsletters', newsletters);
-      return newsletter;
-    }
+    return wrapDbCall(
+      () => supabase.from('newsletters').insert(newsletter).select().single(),
+      () => {
+        const newsletters = getLocalData<Newsletter[]>('newsletters', []);
+        newsletters.push(newsletter);
+        setLocalData('newsletters', newsletters);
+        return newsletter;
+      }
+    );
   },
 
   // Courses & Lessons
   async listCourses(communityId: string): Promise<Course[]> {
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('courses')
-        .select('*')
-        .eq('community_id', communityId);
-      if (error) return [];
-      return data || [];
-    } else {
-      const courses = getLocalData<Course[]>('courses', []);
-      return courses.filter(c => c.community_id === communityId);
-    }
+    return wrapDbCall(
+      () => supabase.from('courses').select('*').eq('community_id', communityId),
+      () => {
+        const courses = getLocalData<Course[]>('courses', []);
+        return courses.filter(c => c.community_id === communityId);
+      }
+    );
   },
 
   async createCourse(course: Course): Promise<Course> {
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('courses')
-        .insert(course)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    } else {
-      const courses = getLocalData<Course[]>('courses', []);
-      courses.push(course);
-      setLocalData('courses', courses);
-      return course;
-    }
+    return wrapDbCall(
+      () => supabase.from('courses').insert(course).select().single(),
+      () => {
+        const courses = getLocalData<Course[]>('courses', []);
+        courses.push(course);
+        setLocalData('courses', courses);
+        return course;
+      }
+    );
   },
 
   async listLessons(courseId: string): Promise<Lesson[]> {
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('lessons')
-        .select('*')
-        .eq('course_id', courseId);
-      if (error) return [];
-      return data || [];
-    } else {
-      const lessons = getLocalData<Lesson[]>('lessons', []);
-      return lessons.filter(l => l.course_id === courseId);
-    }
+    return wrapDbCall(
+      () => supabase.from('lessons').select('*').eq('course_id', courseId),
+      () => {
+        const lessons = getLocalData<Lesson[]>('lessons', []);
+        return lessons.filter(l => l.course_id === courseId);
+      }
+    );
   },
 
   async createLesson(lesson: Lesson): Promise<Lesson> {
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('lessons')
-        .insert(lesson)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    } else {
-      const lessons = getLocalData<Lesson[]>('lessons', []);
-      lessons.push(lesson);
-      setLocalData('lessons', lessons);
-      return lesson;
-    }
+    return wrapDbCall(
+      () => supabase.from('lessons').insert(lesson).select().single(),
+      () => {
+        const lessons = getLocalData<Lesson[]>('lessons', []);
+        lessons.push(lesson);
+        setLocalData('lessons', lessons);
+        return lesson;
+      }
+    );
   },
 
   async listLessonCompletions(userId: string): Promise<LessonCompletion[]> {
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('lesson_completions')
-        .select('*')
-        .eq('user_id', userId);
-      if (error) return [];
-      return data || [];
-    } else {
-      const completions = getLocalData<LessonCompletion[]>('lesson_completions', []);
-      return completions.filter(c => c.user_id === userId);
-    }
+    return wrapDbCall(
+      () => supabase.from('lesson_completions').select('*').eq('user_id', userId),
+      () => {
+        const completions = getLocalData<LessonCompletion[]>('lesson_completions', []);
+        return completions.filter(c => c.user_id === userId);
+      }
+    );
   },
 
   async toggleLessonCompletion(userId: string, lessonId: string): Promise<boolean> {
-    if (isSupabaseConfigured) {
-      const { data } = await supabase
-        .from('lesson_completions')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('lesson_id', lessonId)
-        .single();
-      
-      if (data) {
-        await supabase
+    return wrapDbCall(
+      async () => {
+        const { data, error: selectErr } = await supabase
           .from('lesson_completions')
-          .delete()
-          .eq('id', data.id);
-        return false;
-      } else {
-        await supabase
-          .from('lesson_completions')
-          .insert({
+          .select('id')
+          .eq('user_id', userId)
+          .eq('lesson_id', lessonId)
+          .maybeSingle();
+        
+        if (selectErr) return { data: null, error: selectErr };
+        
+        if (data) {
+          const { error: delErr } = await supabase
+            .from('lesson_completions')
+            .delete()
+            .eq('id', data.id);
+          return { data: false, error: delErr };
+        } else {
+          const { error: insErr } = await supabase
+            .from('lesson_completions')
+            .insert({
+              id: `comp-${userId}-${lessonId}`,
+              user_id: userId,
+              lesson_id: lessonId,
+              completed_at: new Date().toISOString()
+            });
+          return { data: true, error: insErr };
+        }
+      },
+      () => {
+        const completions = getLocalData<LessonCompletion[]>('lesson_completions', []);
+        const index = completions.findIndex(c => c.user_id === userId && c.lesson_id === lessonId);
+        if (index >= 0) {
+          completions.splice(index, 1);
+          setLocalData('lesson_completions', completions);
+          return false;
+        } else {
+          completions.push({
             id: `comp-${userId}-${lessonId}`,
             user_id: userId,
             lesson_id: lessonId,
             completed_at: new Date().toISOString()
           });
-        return true;
+          setLocalData('lesson_completions', completions);
+          return true;
+        }
       }
-    } else {
-      const completions = getLocalData<LessonCompletion[]>('lesson_completions', []);
-      const index = completions.findIndex(c => c.user_id === userId && c.lesson_id === lessonId);
-      if (index >= 0) {
-        completions.splice(index, 1);
-        setLocalData('lesson_completions', completions);
-        return false;
-      } else {
-        completions.push({
-          id: `comp-${userId}-${lessonId}`,
-          user_id: userId,
-          lesson_id: lessonId,
-          completed_at: new Date().toISOString()
-        });
-        setLocalData('lesson_completions', completions);
-        return true;
-      }
-    }
+    );
   }
 };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Users, 
@@ -54,7 +54,8 @@ import { EditProfileModal } from './components/EditProfileModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { UserProfileModal } from './components/UserProfileModal';
 import { usePWAInstall } from './hooks/usePWAInstall';
-import { useAuth } from './lib/auth';
+import { useAuth, AuthContextType } from './lib/auth';
+import { CommunityProvider, useCommunity } from './context/CommunityContext';
 import { 
   dbService, 
   getHydratedPosts, 
@@ -68,43 +69,31 @@ import {
   Membership
 } from './lib/supabase';
 
-// Persistent in-memory & local storage cache for switching between community and portal views seamlessly
-const getInitialCachedCommunities = (): Community[] => {
-  try {
-    const raw = localStorage.getItem('wc_cached_communities');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch {}
-  return [];
-};
-
-const getInitialCachedMemberships = (): Membership[] => {
-  try {
-    const raw = localStorage.getItem('wc_cached_memberships');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch {}
-  return [];
-};
-
-let cachedCommunities: Community[] = getInitialCachedCommunities();
-let cachedMemberships: Membership[] = getInitialCachedMemberships();
-
-export default function App() {
-  const { user, session, loading: authLoading, signIn, signUp, signOut, setRole, updateProfile } = useAuth();
+function AppContent({ auth }: { auth: AuthContextType }) {
+  const { user, session, loading: authLoading, signIn, signUp, signOut, setRole, updateProfile } = auth;
+  const {
+    communities,
+    memberships,
+    isInitialized,
+    loading: commLoading,
+    activeCommunityId: selectedCommunityId,
+    activeCommunity: contextActiveCommunity,
+    viewMode,
+    setActiveCommunityId: setSelectedCommunityId,
+    setViewMode,
+    backToPortal,
+    enterCommunity,
+    refreshCommunities,
+    setCommunities,
+    setMemberships,
+    addCommunityOptimistic,
+    toggleMembershipOptimistic
+  } = useCommunity();
   
   // Custom states for intercepted community creation and unhandled email verification
   const [authBannerMessage, setAuthBannerMessage] = useState<string | null>(null);
   const [pendingCreateCommunity, setPendingCreateCommunity] = useState<boolean>(false);
   const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
-  
-  // Navigation View modes: 'portal' or 'community'
-  const [viewMode, setViewMode] = useState<'portal' | 'community'>('portal');
-  const [selectedCommunityId, setSelectedCommunityId] = useState<string | null>(null);
   
   // Tab within the selected community
   const [activeTab, setActiveTab] = useState<'feed' | 'classroom' | 'events' | 'leaderboard' | 'newsletter'>('feed');
@@ -130,10 +119,8 @@ export default function App() {
     };
   }, [isProfileDropdownOpen]);
 
-  // Database-driven reactive states
+  // Database-driven reactive states for subcollections and rankings
   const [dbLoading, setDbLoading] = useState<boolean>(false);
-  const [communities, setCommunities] = useState<Community[]>(cachedCommunities || []);
-  const [memberships, setMemberships] = useState<Membership[]>(cachedMemberships || []);
   const [posts, setPosts] = useState<Post[]>([]);
   const [courses, setCourses] = useState<CourseTrack[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -231,9 +218,7 @@ export default function App() {
   };
 
   const handleBackToPortal = () => {
-    setSelectedCommunityId(null);
-    setViewMode('portal');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    backToPortal();
   };
 
   // State to control on-demand auth modal visibility
@@ -279,74 +264,47 @@ export default function App() {
     }
   }, [user]);
 
-  // Resilient async data loader calling Supabase DB Service
-  const loadDatabaseData = async (silent = true) => {
-    if (!silent && communities.length === 0 && cachedCommunities.length === 0) {
-      setDbLoading(true);
-    }
+  // Load community subcollections ONLY when active community changes and is non-null
+  const loadCommunitySubcollections = useCallback(async (communityId: string) => {
+    setDbLoading(true);
     try {
-      // 1. Get raw communities & memberships
-      const rawComm = await dbService.listCommunities();
-      const userMemberships = user ? await dbService.getMemberships(user.id) : [];
-
-      if (user && userMemberships && userMemberships.length > 0) {
-        setMemberships(userMemberships);
-        cachedMemberships = userMemberships;
-        try {
-          localStorage.setItem('wc_cached_memberships', JSON.stringify(userMemberships));
-        } catch {}
-      }
-
-      if (rawComm && rawComm.length > 0) {
-        const activeMemberships = (user && userMemberships && userMemberships.length > 0)
-          ? userMemberships
-          : (cachedMemberships.length > 0 ? cachedMemberships : memberships);
-        const activeJoinedIds = new Set(activeMemberships.map(m => m.community_id));
-
-        const mappedCommunities = rawComm.map(c => {
-          const isJoined = activeJoinedIds.has(c.id);
-          return mapCommunityToUI(c, isJoined);
-        });
-
-        setCommunities(mappedCommunities);
-        cachedCommunities = mappedCommunities;
-        try {
-          localStorage.setItem('wc_cached_communities', JSON.stringify(mappedCommunities));
-        } catch {}
-      }
-
-      // 2. Fetch hydrated items for currently active community (if inside one)
-      if (selectedCommunityId) {
-        const activeId = selectedCommunityId;
-        const [hydratedPosts, hydratedCourses, hydratedEvents, hydratedNewsletters] = await Promise.all([
-          getHydratedPosts(activeId, user ? user.id : undefined),
-          getHydratedCourses(activeId, user ? user.id : 'anonymous'),
-          getHydratedEvents(activeId, user ? user.id : undefined),
-          getHydratedNewsletters(activeId)
-        ]);
-        setPosts(hydratedPosts);
-        setCourses(hydratedCourses);
-        setEvents(hydratedEvents);
-        setBroadcasts(hydratedNewsletters);
-      }
-
-      // 3. Load rankings
-      const rawProfiles = await dbService.getLeaderboard();
-      const mappedRankings = rawProfiles.map(p => mapProfileToUser(p));
-      setLeaderboardUsers(mappedRankings);
-
+      const [hydratedPosts, hydratedCourses, hydratedEvents, hydratedNewsletters] = await Promise.all([
+        getHydratedPosts(communityId, user ? user.id : undefined),
+        getHydratedCourses(communityId, user ? user.id : 'anonymous'),
+        getHydratedEvents(communityId, user ? user.id : undefined),
+        getHydratedNewsletters(communityId)
+      ]);
+      setPosts(hydratedPosts);
+      setCourses(hydratedCourses);
+      setEvents(hydratedEvents);
+      setBroadcasts(hydratedNewsletters);
     } catch (e) {
-      console.error('Error fetching database collections:', e);
+      console.error('Error fetching community subcollections:', e);
     } finally {
       setDbLoading(false);
     }
-  };
+  }, [user]);
 
-  // Fetch at boot and when selection switches
+  // Fetch subcollections when selection changes to an active community
   useEffect(() => {
-    const isColdBoot = communities.length === 0 && cachedCommunities.length === 0;
-    loadDatabaseData(!isColdBoot);
-  }, [user, selectedCommunityId]);
+    if (selectedCommunityId) {
+      loadCommunitySubcollections(selectedCommunityId);
+    }
+  }, [selectedCommunityId, loadCommunitySubcollections]);
+
+  // Load rankings once
+  useEffect(() => {
+    const loadRankings = async () => {
+      try {
+        const rawProfiles = await dbService.getLeaderboard();
+        const mappedRankings = rawProfiles.map(p => mapProfileToUser(p));
+        setLeaderboardUsers(mappedRankings);
+      } catch (e) {
+        console.error('Error loading leaderboard:', e);
+      }
+    };
+    loadRankings();
+  }, []);
 
   // Keyboard shortcut listener for Cmd+K search
   useEffect(() => {
@@ -363,7 +321,7 @@ export default function App() {
   const { isInstallable, install } = usePWAInstall();
 
   // Find active community
-  const activeCommunity = communities.find(c => c.id === selectedCommunityId) || communities[0];
+  const activeCommunity = contextActiveCommunity || communities.find(c => c.id === selectedCommunityId) || communities[0];
 
   // Selected subcollections inside active community
   const communityPosts = posts.filter(p => p.communityId === selectedCommunityId);
@@ -371,24 +329,23 @@ export default function App() {
   const communityEvents = events.filter(e => e.communityId === selectedCommunityId);
   const communityBroadcasts = broadcasts.filter(b => b.communityId === selectedCommunityId);
 
-  // Helper selectors for Portal Page - guaranteed not to yield empty array while waiting for background revalidation
-  const joinedCommunityIds = useMemo(() => {
-    const ids = new Set<string>();
-    memberships.forEach(m => ids.add(m.community_id));
-    cachedMemberships.forEach(m => ids.add(m.community_id));
-    return ids;
-  }, [memberships]);
+  // Fallback to cached memberships if user is authenticated (Defensive Filtering)
+  const userJoinedCommunityIds = useMemo(() => {
+    if (!user) return new Set<string>();
+    return new Set(memberships.map((m) => m.community_id));
+  }, [memberships, user]);
 
-  const yourJoinedCommunities = useMemo(() => {
+  const yourCommunities = useMemo(() => {
+    if (!user) return [];
     return communities.filter((c) => 
-      (user && c.created_by === user.id) || 
-      (user && c.createdBy === user.id) ||
-      joinedCommunityIds.has(c.id) || 
+      c.created_by === user.id || 
+      c.createdBy === user.id || 
+      userJoinedCommunityIds.has(c.id) ||
       Boolean(c.isJoined)
     );
-  }, [communities, user, joinedCommunityIds]);
+  }, [communities, user, userJoinedCommunityIds]);
 
-  const discoverCommunities = useMemo(() => {
+  const exploreCommunities = useMemo(() => {
     return communities.filter(c => {
       if (discoverFilter === 'public') return c.privacy === 'public';
       if (discoverFilter === 'gated') return c.privacy === 'gated';
@@ -429,15 +386,18 @@ export default function App() {
         member_count: 1
       };
 
-      await dbService.createCommunity(commData);
-      // Auto join as admin/owner
-      await dbService.createMembership({
+      const newM: Membership = {
         id: generateId('m'),
         user_id: user.id,
         community_id: commId,
         role: 'owner',
         joined_at: new Date().toISOString()
-      });
+      };
+
+      addCommunityOptimistic(mapCommunityToUI(commData, true), newM);
+
+      await dbService.createCommunity(commData);
+      await dbService.createMembership(newM);
 
       showToast(`Community "${newCommName}" launched successfully!`);
       setShowCreateModal(false);
@@ -445,9 +405,8 @@ export default function App() {
       setNewCommSlug('');
       setNewCommDesc('');
       setNewCommPrivacy('public');
-      
-      // Reload lists
-      await loadDatabaseData();
+
+      refreshCommunities(true);
     } catch (e) {
       console.error(e);
       showToast('Error creating community space.');
@@ -462,46 +421,12 @@ export default function App() {
 
     try {
       const comm = communities.find(c => c.id === communityId);
-      if (!comm) return;
-
-      const willBeJoined = !comm.isJoined;
-
-      // Optimistic update
-      const updatedCommunities = communities.map(c => 
-        c.id === communityId 
-          ? { ...c, isJoined: willBeJoined, memberCount: Math.max(0, c.memberCount + (willBeJoined ? 1 : -1)) } 
-          : c
-      );
-      setCommunities(updatedCommunities);
-      cachedCommunities = updatedCommunities;
-      try { localStorage.setItem('wc_cached_communities', JSON.stringify(updatedCommunities)); } catch {}
-
-      if (willBeJoined) {
-        const newM: Membership = {
-          id: generateId('m'),
-          user_id: user.id,
-          community_id: communityId,
-          role: 'member',
-          joined_at: new Date().toISOString()
-        };
-        const updatedM = [...memberships, newM];
-        setMemberships(updatedM);
-        cachedMemberships = updatedM;
-        try { localStorage.setItem('wc_cached_memberships', JSON.stringify(updatedM)); } catch {}
-
-        await dbService.createMembership(newM);
-        showToast(`Successfully joined "${comm.name}"!`);
-      } else {
-        const updatedM = memberships.filter(m => m.community_id !== communityId);
-        setMemberships(updatedM);
-        cachedMemberships = updatedM;
-        try { localStorage.setItem('wc_cached_memberships', JSON.stringify(updatedM)); } catch {}
-
-        await dbService.deleteMembership(user.id, communityId);
+      await toggleMembershipOptimistic(communityId, user.id);
+      if (comm?.isJoined) {
         showToast(`Left "${comm.name}".`);
+      } else if (comm) {
+        showToast(`Successfully joined "${comm.name}"!`);
       }
-
-      await loadDatabaseData(true);
     } catch (error) {
       console.error(error);
       showToast('Membership transaction failed.');
@@ -545,7 +470,9 @@ export default function App() {
       } else {
         showToast('Upvote removed.');
       }
-      await loadDatabaseData();
+      if (selectedCommunityId) {
+        await loadCommunitySubcollections(selectedCommunityId);
+      }
     } catch (err: any) {
       console.error(err);
       if (err?.message && err.message.includes('Rate limit exceeded')) {
@@ -574,7 +501,9 @@ export default function App() {
       const post = posts.find(p => p.id === postId);
 
       showToast('Response published successfully!');
-      await loadDatabaseData();
+      if (selectedCommunityId) {
+        await loadCommunitySubcollections(selectedCommunityId);
+      }
     } catch (e: any) {
       console.error(e);
       if (e?.message && e.message.includes('Rate limit exceeded')) {
@@ -627,7 +556,9 @@ export default function App() {
         showToast('Thread dispatched as email broadcast!');
       }
 
-      await loadDatabaseData();
+      if (selectedCommunityId) {
+        await loadCommunitySubcollections(selectedCommunityId);
+      }
     } catch (e: any) {
       console.error(e);
       if (e?.message && e.message.includes('Rate limit exceeded')) {
@@ -661,7 +592,9 @@ export default function App() {
       });
 
       showToast('Course Track published to the community classroom.');
-      await loadDatabaseData();
+      if (selectedCommunityId) {
+        await loadCommunitySubcollections(selectedCommunityId);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -682,7 +615,9 @@ export default function App() {
       });
 
       showToast(isNowCompleted ? 'Lesson completed! +20 Karma Points' : 'Lesson completion cleared.');
-      await loadDatabaseData();
+      if (selectedCommunityId) {
+        await loadCommunitySubcollections(selectedCommunityId);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -712,7 +647,9 @@ export default function App() {
       });
 
       showToast('New cohort mixer has been scheduled!');
-      await loadDatabaseData();
+      if (selectedCommunityId) {
+        await loadCommunitySubcollections(selectedCommunityId);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -732,7 +669,9 @@ export default function App() {
       } else {
         showToast('RSVP cancelled successfully.');
       }
-      await loadDatabaseData();
+      if (selectedCommunityId) {
+        await loadCommunitySubcollections(selectedCommunityId);
+      }
     } catch (e) {
       console.error('RSVP Error:', e);
       showToast('Failed to register RSVP.');
@@ -757,7 +696,9 @@ export default function App() {
       });
 
       showToast('Newsletter broadcast dispatched successfully.');
-      await loadDatabaseData();
+      if (selectedCommunityId) {
+        await loadCommunitySubcollections(selectedCommunityId);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -1094,7 +1035,7 @@ export default function App() {
                           )}
                         </div>
                         <div className="text-xs text-zinc-400 dark:text-zinc-500 truncate mt-1">
-                          {session?.user?.email || (user?.email) || `${mappedCurrentUser.name.toLowerCase().replace(/\s+/g, '')}@company.com`}
+                          {session?.user?.email || (user as any)?.email || `${mappedCurrentUser.name.toLowerCase().replace(/\s+/g, '')}@company.com`}
                         </div>
                       </div>
 
@@ -1112,9 +1053,7 @@ export default function App() {
                         <button
                           onClick={() => {
                             setIsProfileDropdownOpen(false);
-                            setViewMode('portal');
-                            setSelectedCommunityId(null);
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                            backToPortal();
                           }}
                           className="w-full text-left px-3 py-2 text-xs font-semibold text-zinc-700 hover:text-zinc-900 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-zinc-900 rounded-lg transition-all"
                         >
@@ -1140,12 +1079,10 @@ export default function App() {
                             try {
                               await signOut();
                               setMemberships([]);
-                              cachedMemberships = [];
                               try {
                                 localStorage.removeItem('wc_cached_memberships');
                               } catch {}
-                              setSelectedCommunityId(null);
-                              setViewMode('portal');
+                              backToPortal();
                               showToast('Logged out successfully');
                             } catch (err: any) {
                               showToast('Failed to log out: ' + (err?.message || 'Unknown error'));
@@ -1234,12 +1171,12 @@ export default function App() {
                     <span>Create a Community</span>
                   </button>
 
-                  <a 
-                    href="#discover-hubs"
-                    className="border border-zinc-200 text-zinc-700 bg-white hover:bg-zinc-50 dark:border-zinc-850 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-850 text-xs font-bold px-5 py-2.5 rounded-xl transition-all"
+                  <button 
+                    onClick={() => backToPortal('discover-hubs')}
+                    className="border border-zinc-200 text-zinc-700 bg-white hover:bg-zinc-50 dark:border-zinc-850 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-850 text-xs font-bold px-5 py-2.5 rounded-xl transition-all cursor-pointer"
                   >
                     Explore Public Hubs
-                  </a>
+                  </button>
                 </div>
               </div>
 
@@ -1248,27 +1185,38 @@ export default function App() {
                 <div className="flex items-center justify-between border-b border-zinc-100 pb-2 dark:border-zinc-900">
                   <h2 className="text-sm font-extrabold text-zinc-900 dark:text-zinc-50 flex items-center gap-1.5">
                     <Grid className="h-4 w-4 text-indigo-500" />
-                    Your Communities ({yourJoinedCommunities.length})
+                    Your Communities ({yourCommunities.length})
                   </h2>
                 </div>
 
-                {yourJoinedCommunities.length === 0 ? (
-                  <div className="border border-zinc-200 rounded-2xl p-8 text-center text-zinc-400 bg-white dark:bg-zinc-950 dark:border-zinc-850" id="portal-empty">
-                    <Compass className="h-8 w-8 text-zinc-300 mx-auto mb-2 animate-pulse" />
-                    <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">You haven't joined any communities yet.</h3>
-                    <p className="text-xs text-zinc-400 max-w-sm mx-auto mt-1 leading-relaxed">
-                      Explore communities below to find your cohort, join discussion hubs, and coordinate events.
-                    </p>
-                    <a href="#discover-hubs" className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline mt-2 inline-block">Browse active spaces</a>
-                  </div>
+                {yourCommunities.length === 0 ? (
+                  isInitialized && !commLoading ? (
+                    <div className="border border-zinc-200 rounded-2xl p-8 text-center text-zinc-400 bg-white dark:bg-zinc-950 dark:border-zinc-850" id="portal-empty">
+                      <Compass className="h-8 w-8 text-zinc-300 mx-auto mb-2 animate-pulse" />
+                      <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">You haven't joined any communities yet.</h3>
+                      <p className="text-xs text-zinc-400 max-w-sm mx-auto mt-1 leading-relaxed">
+                        Explore communities below to find your cohort, join discussion hubs, and coordinate events.
+                      </p>
+                      <button 
+                        onClick={() => backToPortal('discover-hubs')}
+                        className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline mt-2 inline-block cursor-pointer"
+                      >
+                        Browse active spaces
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="border border-zinc-200/60 rounded-2xl p-8 text-center bg-white dark:bg-zinc-950 dark:border-zinc-850 flex items-center justify-center gap-2 text-xs text-zinc-400">
+                      <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
+                      <span>Synchronizing your communities...</span>
+                    </div>
+                  )
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {yourJoinedCommunities.map((comm) => (
+                    {yourCommunities.map((comm) => (
                       <div
                         key={comm.id}
                         onClick={() => {
-                          setSelectedCommunityId(comm.id);
-                          setViewMode('community');
+                          enterCommunity(comm.id);
                           setActiveTab('feed');
                         }}
                         className="group cursor-pointer bg-white rounded-2xl border border-zinc-200/80 hover:border-zinc-300 hover:shadow-md transition-all overflow-hidden flex flex-col dark:bg-zinc-950 dark:border-zinc-850"
@@ -1319,7 +1267,7 @@ export default function App() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-100 pb-2 dark:border-zinc-900">
                   <h2 className="text-sm font-extrabold text-zinc-900 dark:text-zinc-50 flex items-center gap-1.5">
                     <Compass className="h-4 w-4 text-indigo-500" />
-                    Explore Communities ({discoverCommunities.length})
+                    Explore Communities ({exploreCommunities.length})
                   </h2>
 
                   <div className="flex bg-zinc-100 p-0.5 rounded-lg dark:bg-zinc-900">
@@ -1350,62 +1298,78 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  {discoverCommunities.map((comm) => (
-                    <div
-                      key={comm.id}
-                      onClick={() => {
-                        setSelectedCommunityId(comm.id);
-                        setViewMode('community');
-                        setActiveTab('feed');
-                      }}
-                      className="cursor-pointer bg-white rounded-2xl border border-zinc-200/80 p-5 shadow-sm hover:border-zinc-300 hover:shadow-md transition-all flex gap-4 dark:bg-zinc-950 dark:border-zinc-850"
-                    >
-                      {/* Left thumbnail */}
-                      <img 
-                        src={comm.bannerUrl} 
-                        alt={comm.name} 
-                        className="w-16 h-16 rounded-xl object-cover shrink-0"
-                      />
+                {exploreCommunities.length === 0 ? (
+                  isInitialized && !commLoading ? (
+                    <div className="border border-zinc-200 rounded-2xl p-8 text-center text-zinc-400 bg-white dark:bg-zinc-950 dark:border-zinc-850">
+                      <Compass className="h-8 w-8 text-zinc-300 mx-auto mb-2 opacity-50" />
+                      <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">No communities found</h3>
+                      <p className="text-xs text-zinc-400 max-w-sm mx-auto mt-1 leading-relaxed">
+                        Create the first community space to get started.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="border border-zinc-200/60 rounded-2xl p-8 text-center bg-white dark:bg-zinc-950 dark:border-zinc-850 flex items-center justify-center gap-2 text-xs text-zinc-400">
+                      <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
+                      <span>Loading active spaces...</span>
+                    </div>
+                  )
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    {exploreCommunities.map((comm) => (
+                      <div
+                        key={comm.id}
+                        onClick={() => {
+                          enterCommunity(comm.id);
+                          setActiveTab('feed');
+                        }}
+                        className="cursor-pointer bg-white rounded-2xl border border-zinc-200/80 p-5 shadow-sm hover:border-zinc-300 hover:shadow-md transition-all flex gap-4 dark:bg-zinc-950 dark:border-zinc-850"
+                      >
+                        {/* Left thumbnail */}
+                        <img 
+                          src={comm.bannerUrl} 
+                          alt={comm.name} 
+                          className="w-16 h-16 rounded-xl object-cover shrink-0"
+                        />
 
-                      {/* Right info */}
-                      <div className="flex-1 min-w-0 flex flex-col justify-between">
-                        <div>
-                          <div className="flex items-start justify-between gap-2">
-                            <h3 className="text-sm font-bold text-zinc-900 truncate dark:text-zinc-100">
-                              {comm.name}
-                            </h3>
-                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                              comm.privacy === 'public' 
-                                ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/20' 
-                                : 'bg-amber-50 text-amber-600 dark:bg-amber-950/20'
-                            }`}>
-                              {comm.privacy}
-                            </span>
+                        {/* Right info */}
+                        <div className="flex-1 min-w-0 flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-start justify-between gap-2">
+                              <h3 className="text-sm font-bold text-zinc-900 truncate dark:text-zinc-100">
+                                {comm.name}
+                              </h3>
+                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                                comm.privacy === 'public' 
+                                  ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/20' 
+                                  : 'bg-amber-50 text-amber-600 dark:bg-amber-950/20'
+                              }`}>
+                                {comm.privacy}
+                              </span>
+                            </div>
+                            
+                            <p className="text-[10px] text-zinc-400 mt-0.5 font-bold font-mono">workconnect.com/{comm.slug}</p>
+                            <p className="text-xs text-zinc-500 mt-1 line-clamp-2 dark:text-zinc-400 leading-normal">{comm.description}</p>
                           </div>
-                          
-                          <p className="text-[10px] text-zinc-400 mt-0.5 font-bold font-mono">workconnect.com/{comm.slug}</p>
-                          <p className="text-xs text-zinc-500 mt-1 line-clamp-2 dark:text-zinc-400 leading-normal">{comm.description}</p>
-                        </div>
 
-                        <div className="pt-3 border-t border-zinc-100 dark:border-zinc-900 mt-3 flex items-center justify-between">
-                          <span className="text-[11px] text-zinc-400 font-semibold">{comm.memberCount} members</span>
-                          
-                          <button
-                            onClick={(e) => handleJoinOrLeaveCommunity(comm.id, e)}
-                            className={`text-[10px] font-extrabold px-3 py-1.5 rounded-lg transition-all ${
-                              comm.isJoined
-                                ? 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-400'
-                                : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                            }`}
-                          >
-                            {comm.isJoined ? 'Leave Space' : 'Join Space'}
-                          </button>
+                          <div className="pt-3 border-t border-zinc-100 dark:border-zinc-900 mt-3 flex items-center justify-between">
+                            <span className="text-[11px] text-zinc-400 font-semibold">{comm.memberCount} members</span>
+                            
+                            <button
+                              onClick={(e) => handleJoinOrLeaveCommunity(comm.id, e)}
+                              className={`text-[10px] font-extrabold px-3 py-1.5 rounded-lg transition-all ${
+                                comm.isJoined
+                                  ? 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-400'
+                                  : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                              }`}
+                            >
+                              {comm.isJoined ? 'Leave Space' : 'Join Space'}
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
             </motion.div>
@@ -1627,22 +1591,19 @@ export default function App() {
         posts={posts}
         courses={courses}
         onSelectCommunity={(communityId) => {
-          setSelectedCommunityId(communityId);
-          setViewMode('community');
+          enterCommunity(communityId);
           setActiveTab('feed');
           setShowSearchModal(false);
           setGlobalSearchQuery('');
         }}
         onSelectPost={(communityId) => {
-          setSelectedCommunityId(communityId);
-          setViewMode('community');
+          enterCommunity(communityId);
           setActiveTab('feed');
           setShowSearchModal(false);
           setGlobalSearchQuery('');
         }}
         onSelectCourse={(communityId) => {
-          setSelectedCommunityId(communityId);
-          setViewMode('community');
+          enterCommunity(communityId);
           setActiveTab('classroom');
           setShowSearchModal(false);
           setGlobalSearchQuery('');
@@ -1687,5 +1648,14 @@ export default function App() {
       <OfflineIndicator />
 
     </div>
+  );
+}
+
+export default function App() {
+  const auth = useAuth();
+  return (
+    <CommunityProvider user={auth.user}>
+      <AppContent auth={auth} />
+    </CommunityProvider>
   );
 }

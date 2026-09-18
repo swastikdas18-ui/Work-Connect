@@ -1,0 +1,332 @@
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Community } from '../types';
+import { Membership, Profile, dbService, mapCommunityToUI } from '../lib/supabase';
+
+export interface CommunityContextType {
+  communities: Community[];
+  memberships: Membership[];
+  isInitialized: boolean;
+  loading: boolean;
+  activeCommunityId: string | null;
+  activeCommunity: Community | null;
+  viewMode: 'portal' | 'community';
+  setActiveCommunityId: (id: string | null) => void;
+  setViewMode: (mode: 'portal' | 'community') => void;
+  backToPortal: (targetSectionId?: string) => void;
+  enterCommunity: (communityId: string) => void;
+  refreshCommunities: (silent?: boolean) => Promise<void>;
+  setCommunities: React.Dispatch<React.SetStateAction<Community[]>>;
+  setMemberships: React.Dispatch<React.SetStateAction<Membership[]>>;
+  addCommunityOptimistic: (newCommunity: Community, membership?: Membership) => void;
+  toggleMembershipOptimistic: (communityId: string, userId: string) => Promise<void>;
+}
+
+const LOCAL_STORAGE_COMMUNITIES_KEY = 'wc_cached_communities';
+const LOCAL_STORAGE_MEMBERSHIPS_KEY = 'wc_cached_memberships';
+
+const loadFromLocalStorage = <T,>(key: string, fallback: T): T => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed as unknown as T;
+    }
+  } catch (e) {
+    console.warn(`Failed to read ${key} from localStorage:`, e);
+  }
+  return fallback;
+};
+
+// Module-level singleton store (survives any component lifecycle changes)
+let globalCommunitiesCache: Community[] = loadFromLocalStorage<Community[]>(LOCAL_STORAGE_COMMUNITIES_KEY, []);
+let globalMembershipsCache: Membership[] = loadFromLocalStorage<Membership[]>(LOCAL_STORAGE_MEMBERSHIPS_KEY, []);
+let globalIsInitialized = globalCommunitiesCache.length > 0;
+
+const CommunityContext = createContext<CommunityContextType | undefined>(undefined);
+
+export interface CommunityProviderProps {
+  children: React.ReactNode;
+  user?: Profile | null;
+}
+
+export const CommunityProvider: React.FC<CommunityProviderProps> = ({ children, user }) => {
+  const [communities, setCommunitiesState] = useState<Community[]>(globalCommunitiesCache);
+  const [memberships, setMembershipsState] = useState<Membership[]>(globalMembershipsCache);
+  const [isInitialized, setIsInitialized] = useState<boolean>(globalIsInitialized);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [activeCommunityId, setActiveCommunityId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'portal' | 'community'>('portal');
+
+  const currentUserRef = useRef<Profile | null | undefined>(user);
+  useEffect(() => {
+    currentUserRef.current = user;
+  }, [user]);
+
+  // Synchronized setters that update module-level singleton cache
+  const setCommunities: React.Dispatch<React.SetStateAction<Community[]>> = useCallback((action) => {
+    setCommunitiesState((prev) => {
+      const next = typeof action === 'function' ? action(prev) : action;
+      if (next && next.length > 0) {
+        globalCommunitiesCache = next;
+        globalIsInitialized = true;
+        try {
+          localStorage.setItem(LOCAL_STORAGE_COMMUNITIES_KEY, JSON.stringify(next));
+        } catch {}
+      }
+      return next;
+    });
+  }, []);
+
+  const setMemberships: React.Dispatch<React.SetStateAction<Membership[]>> = useCallback((action) => {
+    setMembershipsState((prev) => {
+      const next = typeof action === 'function' ? action(prev) : action;
+      globalMembershipsCache = next;
+      try {
+        localStorage.setItem(LOCAL_STORAGE_MEMBERSHIPS_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  // Fetch communities & memberships with cache-first and stale-while-revalidate
+  const refreshCommunities = useCallback(async (silent = true) => {
+    if (!silent && globalCommunitiesCache.length === 0) {
+      setLoading(true);
+    }
+
+    try {
+      const rawComm = await dbService.listCommunities();
+      const currentUser = currentUserRef.current;
+      const userMemberships = currentUser ? await dbService.getMemberships(currentUser.id) : [];
+
+      if (currentUser && userMemberships && userMemberships.length > 0) {
+        globalMembershipsCache = userMemberships;
+        setMembershipsState(userMemberships);
+        try {
+          localStorage.setItem(LOCAL_STORAGE_MEMBERSHIPS_KEY, JSON.stringify(userMemberships));
+        } catch {}
+      }
+
+      // CRUCIAL: Only update communities if rawComm is non-empty!
+      // NEVER wipe communities to [] if we already have communities in memory!
+      if (rawComm && rawComm.length > 0) {
+        const activeMemberships = (currentUser && userMemberships && userMemberships.length > 0)
+          ? userMemberships
+          : globalMembershipsCache;
+        const joinedIds = new Set(activeMemberships.map((m) => m.community_id));
+
+        const mappedCommunities = rawComm.map((c) => {
+          const isJoined = joinedIds.has(c.id);
+          return mapCommunityToUI(c, isJoined);
+        });
+
+        globalCommunitiesCache = mappedCommunities;
+        globalIsInitialized = true;
+        setCommunitiesState(mappedCommunities);
+        setIsInitialized(true);
+        try {
+          localStorage.setItem(LOCAL_STORAGE_COMMUNITIES_KEY, JSON.stringify(mappedCommunities));
+        } catch {}
+      } else if (globalCommunitiesCache.length > 0) {
+        setCommunitiesState([...globalCommunitiesCache]);
+        setIsInitialized(true);
+      }
+    } catch (err) {
+      console.warn('Silent community revalidation failed, preserving cached communities:', err);
+      if (globalCommunitiesCache.length > 0) {
+        setCommunitiesState([...globalCommunitiesCache]);
+        setIsInitialized(true);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Navigation handlers
+  const backToPortal = useCallback((targetSectionId?: string) => {
+    setActiveCommunityId(null);
+    setViewMode('portal');
+
+    if (targetSectionId) {
+      setTimeout(() => {
+        const el = document.getElementById(targetSectionId);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth' });
+        } else {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      }, 50);
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Only fetch from Supabase if communities.length === 0.
+    // If communities already exist in memory, perform silent background stale-while-revalidate.
+    if (globalCommunitiesCache.length === 0) {
+      refreshCommunities(false);
+    } else {
+      refreshCommunities(true);
+    }
+  }, [refreshCommunities]);
+
+  const enterCommunity = useCallback((communityId: string) => {
+    setActiveCommunityId(communityId);
+    setViewMode('community');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const addCommunityOptimistic = useCallback((newCommunity: Community, membership?: Membership) => {
+    const updated = [newCommunity, ...globalCommunitiesCache.filter((c) => c.id !== newCommunity.id)];
+    globalCommunitiesCache = updated;
+    globalIsInitialized = true;
+    setCommunitiesState(updated);
+    setIsInitialized(true);
+    try {
+      localStorage.setItem(LOCAL_STORAGE_COMMUNITIES_KEY, JSON.stringify(updated));
+    } catch {}
+
+    if (membership) {
+      const updatedMems = [membership, ...globalMembershipsCache.filter((m) => m.community_id !== membership.community_id)];
+      globalMembershipsCache = updatedMems;
+      setMembershipsState(updatedMems);
+      try {
+        localStorage.setItem(LOCAL_STORAGE_MEMBERSHIPS_KEY, JSON.stringify(updatedMems));
+      } catch {}
+    }
+  }, []);
+
+  const toggleMembershipOptimistic = useCallback(async (communityId: string, userId: string) => {
+    const comm = globalCommunitiesCache.find((c) => c.id === communityId);
+    if (!comm) return;
+
+    const willBeJoined = !comm.isJoined;
+
+    // Optimistic update communities
+    const updatedCommunities = globalCommunitiesCache.map((c) =>
+      c.id === communityId
+        ? {
+            ...c,
+            isJoined: willBeJoined,
+            memberCount: Math.max(0, c.memberCount + (willBeJoined ? 1 : -1))
+          }
+        : c
+    );
+    globalCommunitiesCache = updatedCommunities;
+    setCommunitiesState(updatedCommunities);
+    try {
+      localStorage.setItem(LOCAL_STORAGE_COMMUNITIES_KEY, JSON.stringify(updatedCommunities));
+    } catch {}
+
+    // Optimistic update memberships
+    if (willBeJoined) {
+      const newM: Membership = {
+        id: `m-${Date.now()}`,
+        user_id: userId,
+        community_id: communityId,
+        role: 'member',
+        joined_at: new Date().toISOString()
+      };
+      const updatedMems = [...globalMembershipsCache, newM];
+      globalMembershipsCache = updatedMems;
+      setMembershipsState(updatedMems);
+      try {
+        localStorage.setItem(LOCAL_STORAGE_MEMBERSHIPS_KEY, JSON.stringify(updatedMems));
+      } catch {}
+
+      await dbService.createMembership(newM);
+    } else {
+      const updatedMems = globalMembershipsCache.filter((m) => m.community_id !== communityId);
+      globalMembershipsCache = updatedMems;
+      setMembershipsState(updatedMems);
+      try {
+        localStorage.setItem(LOCAL_STORAGE_MEMBERSHIPS_KEY, JSON.stringify(updatedMems));
+      } catch {}
+
+      await dbService.deleteMembership(userId, communityId);
+    }
+
+    refreshCommunities(true);
+  }, [refreshCommunities]);
+
+  // Initial load
+  useEffect(() => {
+    const isColdBoot = globalCommunitiesCache.length === 0;
+    refreshCommunities(!isColdBoot);
+  }, [user, refreshCommunities]);
+
+  // Handle hash changes (e.g. #discover-hubs) without re-mounting or wiping state
+  useEffect(() => {
+    const handleHash = () => {
+      if (window.location.hash === '#discover-hubs') {
+        setViewMode((curr) => {
+          if (curr !== 'portal') return 'portal';
+          return curr;
+        });
+        setActiveCommunityId(null);
+        setTimeout(() => {
+          const el = document.getElementById('discover-hubs');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }, 50);
+      }
+    };
+
+    window.addEventListener('hashchange', handleHash);
+    if (window.location.hash === '#discover-hubs') {
+      handleHash();
+    }
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, []);
+
+  const activeCommunity = useMemo(() => {
+    if (!activeCommunityId) return null;
+    return communities.find((c) => c.id === activeCommunityId) || null;
+  }, [communities, activeCommunityId]);
+
+  const value = useMemo<CommunityContextType>(() => ({
+    communities,
+    memberships,
+    isInitialized,
+    loading,
+    activeCommunityId,
+    activeCommunity,
+    viewMode,
+    setActiveCommunityId,
+    setViewMode,
+    backToPortal,
+    enterCommunity,
+    refreshCommunities,
+    setCommunities,
+    setMemberships,
+    addCommunityOptimistic,
+    toggleMembershipOptimistic
+  }), [
+    communities,
+    memberships,
+    isInitialized,
+    loading,
+    activeCommunityId,
+    activeCommunity,
+    viewMode,
+    backToPortal,
+    enterCommunity,
+    refreshCommunities,
+    setCommunities,
+    setMemberships,
+    addCommunityOptimistic,
+    toggleMembershipOptimistic
+  ]);
+
+  return (
+    <CommunityContext.Provider value={value}>
+      {children}
+    </CommunityContext.Provider>
+  );
+};
+
+export function useCommunity(): CommunityContextType {
+  const context = useContext(CommunityContext);
+  if (!context) {
+    throw new Error('useCommunity must be used within a CommunityProvider');
+  }
+  return context;
+}

@@ -64,12 +64,9 @@ import {
   mapProfileToUser, 
   mapCommunityToUI,
   isSupabaseConfigured,
-  isSupabaseSchemaMissing,
-  onSupabaseSchemaMissing,
   Profile,
   Membership
 } from './lib/supabase';
-import { SUPABASE_SETUP_SQL } from './data/setupSql';
 
 // Persistent in-memory cache for switching between community and portal views seamlessly
 let cachedCommunities: Community[] | null = null;
@@ -184,16 +181,6 @@ export default function App() {
     setToastMessage(message);
     setTimeout(() => setToastMessage(null), 3000);
   };
-
-  // State to track if live Supabase schema is missing
-  const [schemaMissing, setSchemaMissing] = useState(isSupabaseSchemaMissing);
-
-  useEffect(() => {
-    onSupabaseSchemaMissing(() => {
-      setSchemaMissing(true);
-      showToast('Live database is uninitialized. Running in local sandbox.');
-    });
-  }, []);
 
   useEffect(() => {
     if (user && pendingCreateCommunity) {
@@ -803,38 +790,6 @@ export default function App() {
         className="flex-1 flex flex-col"
         {...(isAnyModalOpen ? { inert: '' } : {})}
       >
-
-      {/* Supabase Schema Missing Resilient Fallback Banner */}
-      {schemaMissing && (
-        <div className="bg-indigo-600/10 border-b border-indigo-500/20 px-4 py-3 text-xs text-indigo-950 dark:text-indigo-300">
-          <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3 font-semibold">
-            <div className="flex items-center gap-2">
-              <span className="flex h-2 w-2 rounded-full bg-indigo-500 animate-ping" />
-              <span>
-                ⚡ <strong>Supabase Connected (Sandbox Mode Active)</strong>: We detected that your Supabase tables haven't been created yet. The app remains fully functional using an automatic Local Storage fallback.
-              </span>
-            </div>
-            <div className="flex items-center gap-2 self-end md:self-auto">
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(SUPABASE_SETUP_SQL);
-                  showToast('Supabase SQL Setup script copied to clipboard!');
-                }}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-xs transition-all flex items-center gap-1.5"
-              >
-                <CheckCircle className="h-3.5 w-3.5" />
-                <span>Copy Setup SQL</span>
-              </button>
-              <button
-                onClick={() => setSchemaMissing(false)}
-                className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-200 text-[10px] font-bold px-2 py-1.5"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Global Header Layout */}
       <header className="sticky top-0 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md border-b border-zinc-200/60 dark:border-zinc-900/80 z-40 px-4 h-15 flex items-center shadow-xs">

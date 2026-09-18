@@ -35,8 +35,8 @@ interface CommunityTabProps {
   selectedCategory: string;
   onSelectCategory: (category: string) => void;
   onUpvotePost: (postId: string) => void;
-  onAddPost: (postData: { title: string; content: string; codeSnippet?: string; category: string }, sendAsNewsletter: boolean) => void;
-  onAddComment: (postId: string, content: string) => void;
+  onAddPost: (postData: { title: string; content: string; codeSnippet?: string; category: string }, sendAsNewsletter: boolean) => Promise<void> | void;
+  onAddComment: (postId: string, content: string) => Promise<void> | void;
   onToggleBookmark: (postId: string) => void;
   currentUser: User;
   leaderboardUsers: User[];
@@ -126,15 +126,19 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
     }
   };
 
-  const handleSubmitComment = (postId: string) => {
+  const handleSubmitComment = async (postId: string) => {
     if (!newCommentText.trim()) return;
-    onAddComment(postId, newCommentText);
-    setNewCommentText('');
-    
-    // Refresh open drawer post data
-    const updatedPost = posts.find(p => p.id === postId);
-    if (updatedPost) {
-      setActivePostForComments(updatedPost);
+    try {
+      await onAddComment(postId, newCommentText);
+      setNewCommentText('');
+      
+      // Refresh open drawer post data
+      const updatedPost = posts.find(p => p.id === postId);
+      if (updatedPost) {
+        setActivePostForComments(updatedPost);
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
 

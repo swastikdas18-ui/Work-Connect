@@ -98,5 +98,7 @@ export interface Community {
   memberCount: number;
   bannerUrl: string;
   isJoined?: boolean;
+  createdBy?: string;
+  created_by?: string;
 }
 

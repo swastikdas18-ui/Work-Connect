@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Users, 
@@ -68,9 +68,31 @@ import {
   Membership
 } from './lib/supabase';
 
-// Persistent in-memory cache for switching between community and portal views seamlessly
-let cachedCommunities: Community[] | null = null;
-let cachedMemberships: Membership[] | null = null;
+// Persistent in-memory & local storage cache for switching between community and portal views seamlessly
+const getInitialCachedCommunities = (): Community[] => {
+  try {
+    const raw = localStorage.getItem('wc_cached_communities');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return [];
+};
+
+const getInitialCachedMemberships = (): Membership[] => {
+  try {
+    const raw = localStorage.getItem('wc_cached_memberships');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return [];
+};
+
+let cachedCommunities: Community[] = getInitialCachedCommunities();
+let cachedMemberships: Membership[] = getInitialCachedMemberships();
 
 export default function App() {
   const { user, session, loading: authLoading, signIn, signUp, signOut, setRole, updateProfile } = useAuth();
@@ -257,22 +279,41 @@ export default function App() {
     }
   }, [user]);
 
-  // Async data loader calling Supabase DB Service
-  const loadDatabaseData = async () => {
-    setDbLoading(true);
+  // Resilient async data loader calling Supabase DB Service
+  const loadDatabaseData = async (silent = true) => {
+    if (!silent && communities.length === 0 && cachedCommunities.length === 0) {
+      setDbLoading(true);
+    }
     try {
-      // 1. Get raw communities
+      // 1. Get raw communities & memberships
       const rawComm = await dbService.listCommunities();
       const userMemberships = user ? await dbService.getMemberships(user.id) : [];
-      setMemberships(userMemberships);
-      cachedMemberships = userMemberships;
-      
-      const mappedCommunities = rawComm.map(c => {
-        const isJoined = userMemberships.some(m => m.community_id === c.id);
-        return mapCommunityToUI(c, isJoined);
-      });
-      setCommunities(mappedCommunities);
-      cachedCommunities = mappedCommunities;
+
+      if (user && userMemberships && userMemberships.length > 0) {
+        setMemberships(userMemberships);
+        cachedMemberships = userMemberships;
+        try {
+          localStorage.setItem('wc_cached_memberships', JSON.stringify(userMemberships));
+        } catch {}
+      }
+
+      if (rawComm && rawComm.length > 0) {
+        const activeMemberships = (user && userMemberships && userMemberships.length > 0)
+          ? userMemberships
+          : (cachedMemberships.length > 0 ? cachedMemberships : memberships);
+        const activeJoinedIds = new Set(activeMemberships.map(m => m.community_id));
+
+        const mappedCommunities = rawComm.map(c => {
+          const isJoined = activeJoinedIds.has(c.id);
+          return mapCommunityToUI(c, isJoined);
+        });
+
+        setCommunities(mappedCommunities);
+        cachedCommunities = mappedCommunities;
+        try {
+          localStorage.setItem('wc_cached_communities', JSON.stringify(mappedCommunities));
+        } catch {}
+      }
 
       // 2. Fetch hydrated items for currently active community (if inside one)
       if (selectedCommunityId) {
@@ -296,7 +337,6 @@ export default function App() {
 
     } catch (e) {
       console.error('Error fetching database collections:', e);
-      showToast('Database sync issue. Using local persistence fallback.');
     } finally {
       setDbLoading(false);
     }
@@ -304,7 +344,8 @@ export default function App() {
 
   // Fetch at boot and when selection switches
   useEffect(() => {
-    loadDatabaseData();
+    const isColdBoot = communities.length === 0 && cachedCommunities.length === 0;
+    loadDatabaseData(!isColdBoot);
   }, [user, selectedCommunityId]);
 
   // Keyboard shortcut listener for Cmd+K search
@@ -330,16 +371,30 @@ export default function App() {
   const communityEvents = events.filter(e => e.communityId === selectedCommunityId);
   const communityBroadcasts = broadcasts.filter(b => b.communityId === selectedCommunityId);
 
-  // Helper selectors for Portal Page
-  const joinedCommunityIds = new Set(memberships.map((m) => m.community_id));
-  const yourJoinedCommunities = communities.filter((c) => 
-    c.created_by === user?.id || joinedCommunityIds.has(c.id) || c.isJoined
-  );
-  const discoverCommunities = communities.filter(c => {
-    if (discoverFilter === 'public') return c.privacy === 'public';
-    if (discoverFilter === 'gated') return c.privacy === 'gated';
-    return true;
-  });
+  // Helper selectors for Portal Page - guaranteed not to yield empty array while waiting for background revalidation
+  const joinedCommunityIds = useMemo(() => {
+    const ids = new Set<string>();
+    memberships.forEach(m => ids.add(m.community_id));
+    cachedMemberships.forEach(m => ids.add(m.community_id));
+    return ids;
+  }, [memberships]);
+
+  const yourJoinedCommunities = useMemo(() => {
+    return communities.filter((c) => 
+      (user && c.created_by === user.id) || 
+      (user && c.createdBy === user.id) ||
+      joinedCommunityIds.has(c.id) || 
+      Boolean(c.isJoined)
+    );
+  }, [communities, user, joinedCommunityIds]);
+
+  const discoverCommunities = useMemo(() => {
+    return communities.filter(c => {
+      if (discoverFilter === 'public') return c.privacy === 'public';
+      if (discoverFilter === 'gated') return c.privacy === 'gated';
+      return true;
+    });
+  }, [communities, discoverFilter]);
 
   // Dynamic Slug auto-formatting
   const handleNameChange = (val: string) => {
@@ -409,23 +464,44 @@ export default function App() {
       const comm = communities.find(c => c.id === communityId);
       if (!comm) return;
 
-      if (comm.isJoined) {
-        // Leave
-        await dbService.deleteMembership(user.id, communityId);
-        showToast(`Left "${comm.name}".`);
-      } else {
-        // Join
-        await dbService.createMembership({
+      const willBeJoined = !comm.isJoined;
+
+      // Optimistic update
+      const updatedCommunities = communities.map(c => 
+        c.id === communityId 
+          ? { ...c, isJoined: willBeJoined, memberCount: Math.max(0, c.memberCount + (willBeJoined ? 1 : -1)) } 
+          : c
+      );
+      setCommunities(updatedCommunities);
+      cachedCommunities = updatedCommunities;
+      try { localStorage.setItem('wc_cached_communities', JSON.stringify(updatedCommunities)); } catch {}
+
+      if (willBeJoined) {
+        const newM: Membership = {
           id: generateId('m'),
           user_id: user.id,
           community_id: communityId,
           role: 'member',
           joined_at: new Date().toISOString()
-        });
+        };
+        const updatedM = [...memberships, newM];
+        setMemberships(updatedM);
+        cachedMemberships = updatedM;
+        try { localStorage.setItem('wc_cached_memberships', JSON.stringify(updatedM)); } catch {}
+
+        await dbService.createMembership(newM);
         showToast(`Successfully joined "${comm.name}"!`);
+      } else {
+        const updatedM = memberships.filter(m => m.community_id !== communityId);
+        setMemberships(updatedM);
+        cachedMemberships = updatedM;
+        try { localStorage.setItem('wc_cached_memberships', JSON.stringify(updatedM)); } catch {}
+
+        await dbService.deleteMembership(user.id, communityId);
+        showToast(`Left "${comm.name}".`);
       }
 
-      await loadDatabaseData();
+      await loadDatabaseData(true);
     } catch (error) {
       console.error(error);
       showToast('Membership transaction failed.');
@@ -1004,33 +1080,26 @@ export default function App() {
                       transition={{ duration: 0.15 }}
                       className="absolute right-0 mt-2 w-72 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 overflow-hidden"
                     >
-                      {/* Header Section: Name, Headline & Email */}
+                      {/* Header Section: Name & Headline, and Email */}
                       <div className="p-4 border-b border-zinc-100 dark:border-zinc-850">
-                        <div className="font-bold text-zinc-900 dark:text-white truncate">
-                          {mappedCurrentUser.name}
+                        <div className="font-bold text-zinc-900 dark:text-white text-sm truncate flex items-center gap-1.5">
+                          <span>{mappedCurrentUser.name}</span>
+                          {mappedCurrentUser.cohort && (
+                            <>
+                              <span className="text-zinc-400 font-normal">•</span>
+                              <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400 truncate">
+                                {mappedCurrentUser.cohort}
+                              </span>
+                            </>
+                          )}
                         </div>
-                        {mappedCurrentUser.cohort && (
-                          <div className="text-xs text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
-                            {mappedCurrentUser.cohort}
-                          </div>
-                        )}
                         <div className="text-xs text-zinc-400 dark:text-zinc-500 truncate mt-1">
-                          {session?.user?.email || `${mappedCurrentUser.name.toLowerCase().replace(/\s+/g, '')}@company.com`}
+                          {session?.user?.email || (user?.email) || `${mappedCurrentUser.name.toLowerCase().replace(/\s+/g, '')}@company.com`}
                         </div>
                       </div>
 
                       {/* Quick Links Section */}
                       <div className="p-1.5 space-y-0.5 border-b border-zinc-100 dark:border-zinc-850">
-                        <button
-                          onClick={() => {
-                            setIsProfileDropdownOpen(false);
-                            setInspectingUser(mappedCurrentUser);
-                          }}
-                          className="w-full text-left px-3 py-2 text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/40 rounded-lg transition-all flex items-center justify-between"
-                        >
-                          <span>View Public Profile</span>
-                          <span className="text-[10px] font-mono font-bold bg-indigo-100 dark:bg-indigo-900/60 px-1.5 py-0.5 rounded">Card</span>
-                        </button>
                         <button
                           onClick={() => {
                             setIsProfileDropdownOpen(false);
@@ -1051,6 +1120,16 @@ export default function App() {
                         >
                           Your Communities
                         </button>
+                        <button
+                          onClick={() => {
+                            setIsProfileDropdownOpen(false);
+                            setInspectingUser(mappedCurrentUser);
+                          }}
+                          className="w-full text-left px-3 py-2 text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/40 rounded-lg transition-all flex items-center justify-between"
+                        >
+                          <span>View Public Profile</span>
+                          <span className="text-[10px] font-mono font-bold bg-indigo-100 dark:bg-indigo-900/60 px-1.5 py-0.5 rounded">Card</span>
+                        </button>
                       </div>
 
                       {/* Log Out Button */}
@@ -1061,11 +1140,15 @@ export default function App() {
                             try {
                               await signOut();
                               setMemberships([]);
+                              cachedMemberships = [];
+                              try {
+                                localStorage.removeItem('wc_cached_memberships');
+                              } catch {}
                               setSelectedCommunityId(null);
                               setViewMode('portal');
                               showToast('Logged out successfully');
                             } catch (err: any) {
-                              showToast('Failed to log out: ' + err.message);
+                              showToast('Failed to log out: ' + (err?.message || 'Unknown error'));
                             }
                           }}
                           className="w-full text-left px-3 py-2 text-xs font-bold text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40 rounded-lg transition-all"

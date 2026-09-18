@@ -777,7 +777,9 @@ export function mapCommunityToUI(c: Community, joined: boolean): UICommunity {
     accentColor: c.accent_color || '#4f46e5',
     memberCount: c.member_count || 0,
     bannerUrl: c.banner_url || 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=600&q=80',
-    isJoined: joined
+    isJoined: joined,
+    created_by: c.created_by,
+    createdBy: c.created_by
   };
 }
 

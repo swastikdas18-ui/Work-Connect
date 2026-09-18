@@ -66,6 +66,10 @@ import {
 } from './lib/supabase';
 import { SUPABASE_SETUP_SQL } from './data/setupSql';
 
+// Persistent in-memory cache for switching between community and portal views seamlessly
+let cachedCommunities: Community[] | null = null;
+let cachedMemberships: Membership[] | null = null;
+
 export default function App() {
   const { user, session, loading: authLoading, signIn, signUp, signOut, setRole, updateProfile } = useAuth();
   
@@ -83,8 +87,8 @@ export default function App() {
 
   // Database-driven reactive states
   const [dbLoading, setDbLoading] = useState<boolean>(false);
-  const [communities, setCommunities] = useState<Community[]>([]);
-  const [memberships, setMemberships] = useState<Membership[]>([]);
+  const [communities, setCommunities] = useState<Community[]>(cachedCommunities || []);
+  const [memberships, setMemberships] = useState<Membership[]>(cachedMemberships || []);
   const [posts, setPosts] = useState<Post[]>([]);
   const [courses, setCourses] = useState<CourseTrack[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -183,6 +187,12 @@ export default function App() {
     setPendingCreateCommunity(false);
   };
 
+  const handleBackToPortal = () => {
+    setSelectedCommunityId(null);
+    setViewMode('portal');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   // State to control on-demand auth modal visibility
   const [showAuthModal, setShowAuthModal] = useState(false);
 
@@ -234,12 +244,14 @@ export default function App() {
       const rawComm = await dbService.listCommunities();
       const userMemberships = user ? await dbService.getMemberships(user.id) : [];
       setMemberships(userMemberships);
+      cachedMemberships = userMemberships;
       
       const mappedCommunities = rawComm.map(c => {
         const isJoined = userMemberships.some(m => m.community_id === c.id);
         return mapCommunityToUI(c, isJoined);
       });
       setCommunities(mappedCommunities);
+      cachedCommunities = mappedCommunities;
 
       // 2. Fetch hydrated items for currently active community (if inside one)
       if (selectedCommunityId) {
@@ -298,7 +310,10 @@ export default function App() {
   const communityBroadcasts = broadcasts.filter(b => b.communityId === selectedCommunityId);
 
   // Helper selectors for Portal Page
-  const yourJoinedCommunities = communities.filter(c => c.isJoined);
+  const joinedCommunityIds = new Set(memberships.map((m) => m.community_id));
+  const yourJoinedCommunities = communities.filter((c) => 
+    c.created_by === user?.id || joinedCommunityIds.has(c.id) || c.isJoined
+  );
   const discoverCommunities = communities.filter(c => {
     if (discoverFilter === 'public') return c.privacy === 'public';
     if (discoverFilter === 'gated') return c.privacy === 'gated';
@@ -749,7 +764,7 @@ export default function App() {
           <div className="flex items-center gap-3">
             {viewMode === 'community' ? (
               <button 
-                onClick={() => { setViewMode('portal'); setSelectedCommunityId(null); }}
+                onClick={handleBackToPortal}
                 className="flex items-center gap-1.5 text-xs font-bold text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200 px-3 py-2 rounded-xl transition-all dark:text-zinc-300 dark:hover:text-white dark:bg-zinc-900 dark:hover:bg-zinc-800 shadow-sm"
                 id="back-to-portal-breadcrumb"
               >
@@ -757,7 +772,7 @@ export default function App() {
               </button>
             ) : (
               <button 
-                onClick={() => { setViewMode('portal'); setSelectedCommunityId(null); }}
+                onClick={handleBackToPortal}
                 className="flex items-center gap-2"
               >
                 <div className="h-7 w-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-extrabold shadow-sm hover:scale-105 transition-transform">

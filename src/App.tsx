@@ -48,6 +48,10 @@ import { CalendarTab } from './components/CalendarTab';
 import { LeaderboardTab } from './components/LeaderboardTab';
 import { NewsletterTab } from './components/NewsletterTab';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import { AuthModal } from './components/AuthModal';
+import { CreateCommunityModal } from './components/CreateCommunityModal';
+import { EditProfileModal } from './components/EditProfileModal';
+import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { usePWAInstall } from './hooks/usePWAInstall';
 import { useAuth } from './lib/auth';
 import { 
@@ -1482,320 +1486,65 @@ export default function App() {
       </div>
 
       {/* CREATE A COMMUNITY MODAL */}
-      <AnimatePresence>
-        {showCreateModal && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.4 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowCreateModal(false)}
-              className="fixed inset-0 bg-black z-50"
-            />
-            
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: -20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: -20 }}
-              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-md bg-white dark:bg-zinc-900 rounded-2xl p-6 shadow-2xl border border-zinc-200 dark:border-zinc-800 z-50"
-            >
-              <div className="flex justify-between items-center pb-3 border-b border-zinc-100 dark:border-zinc-800">
-                <h3 className="text-base font-extrabold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
-                  <Sparkles className="h-4 w-4 text-indigo-500 fill-indigo-100 dark:fill-indigo-950/40" />
-                  Create a Community
-                </h3>
-                <button 
-                  onClick={() => setShowCreateModal(false)}
-                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-250"
-                >
-                  <X className="h-4.5 w-4.5" />
-                </button>
-              </div>
-
-              <form onSubmit={handleCreateCommunity} className="mt-4 space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Community Name</label>
-                  <input 
-                    type="text" 
-                    required
-                    placeholder="e.g. Interns Summer 2026, Frontend Guild"
-                    value={newCommName}
-                    onChange={(e) => handleNameChange(e.target.value)}
-                    className="w-full text-xs font-semibold px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Handle Slug URL</label>
-                  <div className="flex rounded-xl bg-zinc-50 border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 overflow-hidden text-xs">
-                    <span className="px-3.5 py-2.5 text-zinc-400 border-r border-zinc-200 bg-zinc-100 dark:bg-zinc-850 dark:border-zinc-700 select-none font-medium">
-                      workconnect.com/
-                    </span>
-                    <input 
-                      type="text" 
-                      required
-                      placeholder="slug"
-                      value={newCommSlug}
-                      onChange={(e) => setNewCommSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]+/g, ''))}
-                      className="flex-1 px-3.5 py-2.5 bg-transparent focus:outline-none font-semibold text-zinc-700 dark:text-zinc-200"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Hub Description</label>
-                  <textarea 
-                    rows={3}
-                    placeholder="Briefly describe the purpose of this community space..."
-                    value={newCommDesc}
-                    onChange={(e) => setNewCommDesc(e.target.value)}
-                    className="w-full text-xs font-medium px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200 resize-none"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Privacy Level</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { val: 'public', label: 'Public', icon: Globe },
-                      { val: 'gated', label: 'Gated', icon: UserCheck },
-                      { val: 'private', label: 'Private', icon: Lock }
-                    ].map((mode) => (
-                      <button
-                        key={mode.val}
-                        type="button"
-                        onClick={() => setNewCommPrivacy(mode.val as any)}
-                        className={`p-2.5 border rounded-xl text-xs font-semibold flex flex-col items-center gap-1 transition-all ${
-                          newCommPrivacy === mode.val
-                            ? 'border-indigo-600 bg-indigo-50/40 text-indigo-700 dark:border-indigo-500 dark:text-indigo-400 dark:bg-zinc-850'
-                            : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300'
-                        }`}
-                      >
-                        <mode.icon className="h-4 w-4" />
-                        <span>{mode.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-100 dark:border-zinc-800">
-                  <button 
-                    type="button"
-                    onClick={() => setShowCreateModal(false)}
-                    className="text-xs font-bold border border-zinc-200 text-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-350"
-                  >
-                    Cancel
-                  </button>
-
-                  <button 
-                    type="submit"
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-2 rounded-xl shadow-md transition-all"
-                  >
-                    Launch Community
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      <CreateCommunityModal 
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        newCommName={newCommName}
+        newCommSlug={newCommSlug}
+        newCommDesc={newCommDesc}
+        newCommPrivacy={newCommPrivacy}
+        onNameChange={handleNameChange}
+        onSlugChange={setNewCommSlug}
+        onDescChange={setNewCommDesc}
+        onPrivacyChange={setNewCommPrivacy}
+        onSubmit={handleCreateCommunity}
+      />
 
       {/* EDIT PROFILE MODAL */}
-      <AnimatePresence>
-        {showProfileModal && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.4 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowProfileModal(false)}
-              className="fixed inset-0 bg-black z-50"
-            />
-            
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: -20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: -20 }}
-              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-md bg-white dark:bg-zinc-900 rounded-2xl p-6 shadow-2xl border border-zinc-200 dark:border-zinc-800 z-50"
-            >
-              <div className="flex justify-between items-center pb-3 border-b border-zinc-100 dark:border-zinc-800">
-                <h3 className="text-base font-extrabold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
-                  <UserIcon className="h-4.5 w-4.5 text-indigo-500" />
-                  Your Profile Information
-                </h3>
-                <button 
-                  onClick={() => setShowProfileModal(false)}
-                  className="text-zinc-400 hover:text-zinc-600"
-                >
-                  <X className="h-4.5 w-4.5" />
-                </button>
-              </div>
-
-              <form onSubmit={handleProfileUpdateSubmit} className="mt-4 space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Full Name</label>
-                  <input 
-                    type="text" 
-                    required
-                    placeholder="e.g. Alex Rivera"
-                    value={upName}
-                    onChange={(e) => setUpName(e.target.value)}
-                    className="w-full text-xs font-semibold px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Headline / Cohort Title</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. Software Engineering Intern"
-                    value={upHeadline}
-                    onChange={(e) => setUpHeadline(e.target.value)}
-                    className="w-full text-xs font-semibold px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Select Avatar Icon</label>
-                  <div className="flex items-center gap-2 justify-center py-2">
-                    {prebuiltAvatars.map((av) => (
-                      <button
-                        key={av}
-                        type="button"
-                        onClick={() => setUpAvatar(av)}
-                        className={`h-10 w-10 rounded-full overflow-hidden border-2 transition-all ${
-                          upAvatar === av ? 'border-indigo-500 scale-110 shadow' : 'border-transparent opacity-70 hover:opacity-100'
-                        }`}
-                      >
-                        <img src={av} alt="avatar option" className="h-full w-full object-cover" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-100 dark:border-zinc-800">
-                  <button 
-                    type="button"
-                    onClick={() => setShowProfileModal(false)}
-                    className="text-xs font-bold border border-zinc-200 text-zinc-600 px-4 py-2 rounded-xl hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-350"
-                  >
-                    Cancel
-                  </button>
-
-                  <button 
-                    type="submit"
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-2 rounded-xl shadow-md transition-all"
-                  >
-                    Save Modifications
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      <EditProfileModal 
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        upName={upName}
+        setUpName={setUpName}
+        upHeadline={upHeadline}
+        setUpHeadline={setUpHeadline}
+        upAvatar={upAvatar}
+        setUpAvatar={setUpAvatar}
+        prebuiltAvatars={prebuiltAvatars}
+        onSubmit={handleProfileUpdateSubmit}
+      />
 
       {/* GLOBAL Cmd+K SEARCH MODAL */}
-      <AnimatePresence>
-        {showSearchModal && (
-          <>
-            <div className="fixed inset-0 bg-black/30 z-50 backdrop-blur-xs" onClick={() => setShowSearchModal(false)} />
-            <motion.div 
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="fixed top-1/4 left-1/2 -translate-x-1/2 w-[90%] max-w-lg bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 z-50 overflow-hidden"
-            >
-              <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-3">
-                <Search className="h-4.5 w-4.5 text-zinc-400" />
-                <input 
-                  type="text" 
-                  autoFocus
-                  placeholder="Global search posts, classes, users, events..."
-                  value={globalSearchQuery}
-                  onChange={(e) => setGlobalSearchQuery(e.target.value)}
-                  className="w-full text-xs font-medium focus:outline-none bg-transparent dark:text-zinc-200"
-                />
-                <button 
-                  onClick={() => setShowSearchModal(false)}
-                  className="text-[10px] font-bold text-zinc-400 hover:text-zinc-600 bg-zinc-100 px-1.5 py-1 rounded dark:bg-zinc-850"
-                >
-                  ESC
-                </button>
-              </div>
-
-              {/* Instant Search Results */}
-              <div className="max-h-64 overflow-y-auto p-4 divide-y divide-zinc-50 dark:divide-zinc-850">
-                {globalSearchQuery === '' ? (
-                  <div className="text-center py-6 text-zinc-400">
-                    <Laptop className="h-6 w-6 mx-auto mb-1.5 opacity-50" />
-                    <p className="text-[11px]">Type something to browse communities, feeds, and classes instantly...</p>
-                  </div>
-                ) : (
-                  <>
-                    {/* Communities match */}
-                    {communities.filter(c => c.name.toLowerCase().includes(globalSearchQuery.toLowerCase())).map(c => (
-                      <div 
-                        key={c.id} 
-                        onClick={() => {
-                          setSelectedCommunityId(c.id);
-                          setViewMode('community');
-                          setActiveTab('feed');
-                          setShowSearchModal(false);
-                          setGlobalSearchQuery('');
-                        }}
-                        className="py-2.5 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-850 rounded px-2 flex items-center justify-between"
-                      >
-                        <div>
-                          <span className="text-[9px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-1 rounded dark:bg-zinc-900 dark:text-indigo-400">Community</span>
-                          <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 mt-1">{c.name}</p>
-                        </div>
-                        <ChevronRight className="h-3.5 w-3.5 text-zinc-300" />
-                      </div>
-                    ))}
-
-                    {/* Posts match */}
-                    {posts.filter(p => p.title.toLowerCase().includes(globalSearchQuery.toLowerCase())).map(p => (
-                      <div 
-                        key={p.id} 
-                        onClick={() => {
-                          setSelectedCommunityId(p.communityId || 'interns-2026');
-                          setViewMode('community');
-                          setActiveTab('feed');
-                          setShowSearchModal(false);
-                          setGlobalSearchQuery('');
-                        }}
-                        className="py-2.5 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-850 rounded px-2"
-                      >
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 px-1 rounded dark:bg-zinc-900 dark:text-amber-400">Post</span>
-                        <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 mt-1">{p.title}</p>
-                      </div>
-                    ))}
-
-                    {/* Courses match */}
-                    {courses.filter(c => c.title.toLowerCase().includes(globalSearchQuery.toLowerCase())).map(c => (
-                      <div 
-                        key={c.id} 
-                        onClick={() => {
-                          setSelectedCommunityId(c.communityId || 'interns-2026');
-                          setViewMode('community');
-                          setActiveTab('classroom');
-                          setShowSearchModal(false);
-                          setGlobalSearchQuery('');
-                        }}
-                        className="py-2.5 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-850 rounded px-2"
-                      >
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-teal-600 bg-teal-50 px-1 rounded dark:bg-zinc-900 dark:text-teal-400">Course</span>
-                        <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 mt-1">{c.title}</p>
-                      </div>
-                    ))}
-                  </>
-                )}
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      <GlobalSearchModal 
+        isOpen={showSearchModal}
+        onClose={() => setShowSearchModal(false)}
+        query={globalSearchQuery}
+        setQuery={setGlobalSearchQuery}
+        communities={communities}
+        posts={posts}
+        courses={courses}
+        onSelectCommunity={(communityId) => {
+          setSelectedCommunityId(communityId);
+          setViewMode('community');
+          setActiveTab('feed');
+          setShowSearchModal(false);
+          setGlobalSearchQuery('');
+        }}
+        onSelectPost={(communityId) => {
+          setSelectedCommunityId(communityId);
+          setViewMode('community');
+          setActiveTab('feed');
+          setShowSearchModal(false);
+          setGlobalSearchQuery('');
+        }}
+        onSelectCourse={(communityId) => {
+          setSelectedCommunityId(communityId);
+          setViewMode('community');
+          setActiveTab('classroom');
+          setShowSearchModal(false);
+          setGlobalSearchQuery('');
+        }}
+      />
 
       {/* Global Toast Alerts */}
       <AnimatePresence>
@@ -1813,193 +1562,24 @@ export default function App() {
       </AnimatePresence>
 
       {/* ON-DEMAND AUTH MODAL */}
-      <AnimatePresence>
-        {showAuthModal && (
-          <>
-            <div className="fixed inset-0 bg-black/60 z-50 backdrop-blur-xs" onClick={closeAuthModal} />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: '-45%', x: '-50%' }}
-              animate={{ opacity: 1, scale: 1, y: '-50%', x: '-50%' }}
-              exit={{ opacity: 0, scale: 0.95, y: '-45%', x: '-50%' }}
-              className="fixed top-1/2 left-1/2 w-[92%] max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-2xl z-50 space-y-5 overflow-y-auto max-h-[85vh]"
-            >
-              {verificationEmail ? (
-                <div className="text-center space-y-5 py-4">
-                  <button 
-                    onClick={closeAuthModal}
-                    className="absolute top-4 right-4 p-1.5 rounded-lg text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all"
-                  >
-                    <X className="h-4.5 w-4.5" />
-                  </button>
-                  <div className="h-12 w-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto dark:bg-emerald-950/40 dark:text-emerald-450 animate-pulse">
-                    <Mail className="h-6 w-6" />
-                  </div>
-                  <div className="space-y-2">
-                    <h3 className="text-base font-extrabold text-zinc-900 dark:text-white">Verify Your Email</h3>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed max-w-sm mx-auto">
-                      Check your email: We sent a confirmation link to <span className="font-extrabold text-zinc-850 dark:text-zinc-150">{verificationEmail}</span>. Verify your email to complete registration.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setVerificationEmail(null);
-                      setAuthMode('signin');
-                    }}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-xl shadow-lg transition-all"
-                  >
-                    Back to Sign In
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <div className="text-center space-y-1 relative">
-                    <button 
-                      onClick={closeAuthModal}
-                      className="absolute -top-1 -right-1 p-1.5 rounded-lg text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all"
-                    >
-                      <X className="h-4.5 w-4.5" />
-                    </button>
-                    <div className="h-10 w-10 rounded-xl bg-indigo-500 text-white flex items-center justify-center mx-auto shadow-md">
-                      <Sparkles className="h-5.5 w-5.5" />
-                    </div>
-                    <h2 className="text-lg font-extrabold tracking-tight text-zinc-900 dark:text-white mt-2">Welcome to Work Connect</h2>
-                    <p className="text-[11px] text-zinc-500">Connect with cohorts, exchange insights, and milestones.</p>
-                    
-                    <div className="pt-1">
-                      {isSupabaseConfigured ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-200/50">
-                          <span className="h-1 w-1 rounded-full bg-emerald-500 animate-pulse" />
-                          Live Supabase Server Active
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-extrabold bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 border border-amber-200/50">
-                          <span className="h-1 w-1 rounded-full bg-amber-500 animate-pulse" />
-                          Offline Sandbox Mode Active
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {authBannerMessage && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: -5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="bg-indigo-50/70 border border-indigo-100/40 dark:bg-indigo-950/20 dark:border-indigo-900/50 p-3.5 rounded-2xl flex items-start gap-2.5"
-                    >
-                      <ShieldAlert className="h-4.5 w-4.5 text-indigo-650 dark:text-indigo-400 shrink-0 mt-0.5" />
-                      <p className="text-xs text-indigo-850 dark:text-indigo-300 font-medium leading-relaxed text-left">
-                        {authBannerMessage}
-                      </p>
-                    </motion.div>
-                  )}
-
-                  {/* Tab Selector */}
-                  <div className="flex bg-zinc-100 p-1 rounded-xl dark:bg-zinc-800">
-                    <button
-                      onClick={() => setAuthMode('signin')}
-                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                        authMode === 'signin'
-                          ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-700 dark:text-zinc-50'
-                          : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400'
-                      }`}
-                    >
-                      Sign In
-                    </button>
-                    <button
-                      onClick={() => setAuthMode('signup')}
-                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                        authMode === 'signup'
-                          ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-700 dark:text-zinc-50'
-                          : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400'
-                      }`}
-                    >
-                      Sign Up
-                    </button>
-                  </div>
-
-                  <form onSubmit={handleAuthSubmit} className="space-y-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Email Address</label>
-                      <input 
-                        type="email" 
-                        required
-                        placeholder="e.g. alex@company.com"
-                        value={suEmail}
-                        onChange={(e) => setSuEmail(e.target.value)}
-                        className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Password</label>
-                      <input 
-                        type="password" 
-                        required
-                        placeholder="••••••••"
-                        value={suPassword}
-                        onChange={(e) => setSuPassword(e.target.value)}
-                        className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
-                      />
-                    </div>
-
-                    {authMode === 'signup' && (
-                      <motion.div 
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="space-y-4 pt-2 border-t border-zinc-100 dark:border-zinc-800"
-                      >
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Full Name</label>
-                          <input 
-                            type="text" 
-                            required={authMode === 'signup'}
-                            placeholder="e.g. Alex Rivera"
-                            value={suName}
-                            onChange={(e) => setSuName(e.target.value)}
-                            className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
-                          />
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Headline / Title</label>
-                          <input 
-                            type="text" 
-                            placeholder="e.g. Software Engineering Intern"
-                            value={suHeadline}
-                            onChange={(e) => setSuHeadline(e.target.value)}
-                            className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
-                          />
-                        </div>
-                      </motion.div>
-                    )}
-
-                    <div className="pt-2">
-                      <button
-                        type="submit"
-                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-xl shadow-lg transition-all"
-                      >
-                        {authMode === 'signin' ? 'Sign In' : 'Create Account'}
-                      </button>
-                    </div>
-
-                    <div className="text-center pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
-                        className="text-xs text-indigo-600 hover:text-indigo-700 font-bold dark:text-indigo-400 dark:hover:text-indigo-300 transition-all"
-                      >
-                        {authMode === 'signin' 
-                          ? "Don't have an account? Sign Up" 
-                          : "Already have an account? Sign In"}
-                      </button>
-                    </div>
-                  </form>
-                </>
-              )}
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      <AuthModal 
+        isOpen={showAuthModal}
+        onClose={closeAuthModal}
+        authMode={authMode}
+        setAuthMode={setAuthMode}
+        verificationEmail={verificationEmail}
+        setVerificationEmail={setVerificationEmail}
+        authBannerMessage={authBannerMessage}
+        suEmail={suEmail}
+        setSuEmail={setSuEmail}
+        suPassword={suPassword}
+        setSuPassword={setSuPassword}
+        suName={suName}
+        setSuName={setSuName}
+        suHeadline={suHeadline}
+        setSuHeadline={setSuHeadline}
+        handleAuthSubmit={handleAuthSubmit}
+      />
 
       <OfflineIndicator />
 

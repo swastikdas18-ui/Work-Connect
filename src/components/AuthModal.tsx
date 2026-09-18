@@ -1,7 +1,13 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Mail, Sparkles, ShieldAlert, X } from 'lucide-react';
+import { Mail, Sparkles, ShieldAlert, X, AlertCircle } from 'lucide-react';
 import { isSupabaseConfigured } from '../lib/supabase';
+
+export type AuthIntent =
+  | { type: 'create_community' }
+  | { type: 'join_community'; communityId: string; communityName: string }
+  | { type: 'rsvp_event'; eventId: string }
+  | { type: 'general' };
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -11,6 +17,8 @@ interface AuthModalProps {
   verificationEmail: string | null;
   setVerificationEmail: (email: string | null) => void;
   authBannerMessage: string | null;
+  intent?: AuthIntent;
+  errorMessage?: string | null;
   suEmail: string;
   setSuEmail: (email: string) => void;
   suPassword: string;
@@ -30,6 +38,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   verificationEmail,
   setVerificationEmail,
   authBannerMessage,
+  intent,
+  errorMessage,
   suEmail,
   setSuEmail,
   suPassword,
@@ -40,6 +50,35 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   setSuHeadline,
   handleAuthSubmit,
 }) => {
+  const activeIntent: AuthIntent = intent || { type: 'general' };
+
+  const getHeaderCopy = () => {
+    if (activeIntent.type === 'create_community') {
+      return {
+        title: 'Create Your Community',
+        subtitle: 'Sign in or create an account to start and manage your hub.',
+      };
+    }
+    if (activeIntent.type === 'join_community') {
+      return {
+        title: `Join ${activeIntent.communityName}`,
+        subtitle: 'Sign in to join this workspace and participate in discussions.',
+      };
+    }
+    if (activeIntent.type === 'rsvp_event') {
+      return {
+        title: 'RSVP to Event',
+        subtitle: 'Sign in to reserve your spot and receive calendar updates.',
+      };
+    }
+    return {
+      title: 'Welcome to Work Connect',
+      subtitle: 'Sign in to your workplace account.',
+    };
+  };
+
+  const headerCopy = getHeaderCopy();
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -90,8 +129,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <div className="h-10 w-10 rounded-xl bg-indigo-500 text-white flex items-center justify-center mx-auto shadow-md">
                     <Sparkles className="h-5.5 w-5.5" />
                   </div>
-                  <h2 className="text-lg font-extrabold tracking-tight text-zinc-900 dark:text-white mt-2">Welcome to Work Connect</h2>
-                  <p className="text-[11px] text-zinc-500">Connect with cohorts, exchange insights, and milestones.</p>
+                  <h2 className="text-lg font-extrabold tracking-tight text-zinc-900 dark:text-white mt-2">
+                    {headerCopy.title}
+                  </h2>
+                  <p className="text-[11px] text-zinc-500">
+                    {headerCopy.subtitle}
+                  </p>
                   
                   <div className="pt-1">
                     {isSupabaseConfigured ? (
@@ -108,7 +151,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </div>
                 </div>
 
-                {authBannerMessage && (
+                {errorMessage && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-rose-50 border border-rose-200/80 dark:bg-rose-950/40 dark:border-rose-900/60 p-3 rounded-xl flex items-start gap-2 text-left"
+                  >
+                    <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-rose-750 dark:text-rose-300 font-medium leading-relaxed">
+                      {errorMessage}
+                    </p>
+                  </motion.div>
+                )}
+
+                {authBannerMessage && !errorMessage && (
                   <motion.div 
                     initial={{ opacity: 0, y: -5 }}
                     animate={{ opacity: 1, y: 0 }}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { WifiOff, Wifi } from 'lucide-react';
 
 export function useOnlineStatus() {
@@ -25,14 +25,30 @@ export function useOnlineStatus() {
 export const OfflineIndicator: React.FC = () => {
   const isOnline = useOnlineStatus();
   const [showStatusChange, setShowStatusChange] = useState(false);
+  const isFirstMount = useRef(true);
+  const wasOffline = useRef(false);
 
   useEffect(() => {
+    // Suppress initial mount toast if already online
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      if (!isOnline) {
+        wasOffline.current = true;
+        setShowStatusChange(true);
+      }
+      return;
+    }
+
     if (!isOnline) {
+      wasOffline.current = true;
       setShowStatusChange(true);
-    } else {
-      // Show briefly when coming back online
+    } else if (wasOffline.current) {
+      // Only show when transitioning from offline to online
       setShowStatusChange(true);
-      const timer = setTimeout(() => setShowStatusChange(false), 3000);
+      const timer = setTimeout(() => {
+        setShowStatusChange(false);
+        wasOffline.current = false;
+      }, 3000);
       return () => clearTimeout(timer);
     }
   }, [isOnline]);

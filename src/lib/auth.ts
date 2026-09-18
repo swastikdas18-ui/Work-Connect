@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured, Profile, dbService } from './supabase';
 import { Session } from '@supabase/supabase-js';
+export { formatAuthError } from './formatAuthError';
 
 export interface AuthContextType {
   user: Profile | null;

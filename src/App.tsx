@@ -48,13 +48,13 @@ import { CalendarTab } from './components/CalendarTab';
 import { LeaderboardTab } from './components/LeaderboardTab';
 import { NewsletterTab } from './components/NewsletterTab';
 import { OfflineIndicator } from './components/OfflineIndicator';
-import { AuthModal } from './components/AuthModal';
+import { AuthModal, AuthIntent } from './components/AuthModal';
 import { CreateCommunityModal } from './components/CreateCommunityModal';
 import { EditProfileModal } from './components/EditProfileModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { UserProfileModal } from './components/UserProfileModal';
 import { usePWAInstall } from './hooks/usePWAInstall';
-import { useAuth, AuthContextType } from './lib/auth';
+import { useAuth, AuthContextType, formatAuthError } from './lib/auth';
 import { CommunityProvider, useCommunity } from './context/CommunityContext';
 import { 
   supabase,
@@ -93,6 +93,8 @@ function AppContent({ auth }: { auth: AuthContextType }) {
   
   // Custom states for intercepted community creation and unhandled email verification
   const [authBannerMessage, setAuthBannerMessage] = useState<string | null>(null);
+  const [authIntent, setAuthIntent] = useState<AuthIntent>({ type: 'general' });
+  const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);
   const [pendingCreateCommunity, setPendingCreateCommunity] = useState<boolean>(false);
   const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
   
@@ -201,36 +203,79 @@ function AppContent({ auth }: { auth: AuthContextType }) {
     }
   }, [user, pendingCreateCommunity]);
 
-  const handleCreateCommunityClick = () => {
-    if (!user) {
-      setAuthBannerMessage("Please sign in or create an account to start a community.");
-      setPendingCreateCommunity(true);
-      setAuthMode('signin');
-      setShowAuthModal(true);
-    } else {
-      setShowCreateModal(true);
-    }
+  // State to control on-demand auth modal visibility
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
+  const openAuthModal = (options?: {
+    mode?: 'signin' | 'signup';
+    intent?: AuthIntent;
+    bannerMessage?: string;
+  }) => {
+    if (options?.mode) setAuthMode(options.mode);
+    if (options?.intent) setAuthIntent(options.intent);
+    else setAuthIntent({ type: 'general' });
+    if (options?.bannerMessage) setAuthBannerMessage(options.bannerMessage);
+    else setAuthBannerMessage(null);
+    setAuthErrorMessage(null);
+    setShowAuthModal(true);
   };
 
   const closeAuthModal = () => {
     setShowAuthModal(false);
     setVerificationEmail(null);
     setAuthBannerMessage(null);
+    setAuthErrorMessage(null);
     setPendingCreateCommunity(false);
+    setAuthIntent({ type: 'general' });
+  };
+
+  const resumeAuthIntent = async (intentToResume: AuthIntent, authenticatedUserId?: string) => {
+    const activeIntent = { ...intentToResume };
+    setAuthIntent({ type: 'general' });
+
+    if (activeIntent.type === 'create_community') {
+      setShowCreateModal(true);
+    } else if (activeIntent.type === 'join_community') {
+      const uId = authenticatedUserId || user?.id;
+      if (uId) {
+        try {
+          await toggleMembershipOptimistic(activeIntent.communityId, uId);
+          showToast(`Successfully joined "${activeIntent.communityName}"!`);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    } else if (activeIntent.type === 'rsvp_event') {
+      setTimeout(() => {
+        handleToggleRsvp(activeIntent.eventId);
+      }, 150);
+    }
+  };
+
+  const handleCreateCommunityClick = () => {
+    if (!user) {
+      openAuthModal({
+        mode: 'signin',
+        intent: { type: 'create_community' },
+        bannerMessage: 'Please sign in or create an account to start a community.'
+      });
+    } else {
+      setShowCreateModal(true);
+    }
   };
 
   const handleBackToPortal = () => {
     backToPortal();
   };
 
-  // State to control on-demand auth modal visibility
-  const [showAuthModal, setShowAuthModal] = useState(false);
-
   // Helper to guard protected actions and prompt login modal if needed
   const ensureUserAuthenticated = (actionDescription: string): boolean => {
     if (!user) {
-      setAuthMode('signin');
-      setShowAuthModal(true);
+      openAuthModal({
+        mode: 'signin',
+        intent: { type: 'general' },
+        bannerMessage: `Please sign in to ${actionDescription}.`
+      });
       showToast(`Please sign in to ${actionDescription}.`);
       return false;
     }
@@ -416,10 +461,16 @@ function AppContent({ auth }: { auth: AuthContextType }) {
   };
 
   // Join or Leave community
-  const handleJoinOrLeaveCommunity = async (communityId: string, e: React.MouseEvent) => {
+  const handleJoinOrLeaveCommunity = async (communityId: string, communityName: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!ensureUserAuthenticated('join communities')) return;
-    if (!user) return;
+    if (!user) {
+      openAuthModal({
+        mode: 'signin',
+        intent: { type: 'join_community', communityId, communityName },
+        bannerMessage: `Please sign in to join ${communityName}.`
+      });
+      return;
+    }
 
     try {
       const comm = communities.find(c => c.id === communityId);
@@ -660,10 +711,11 @@ function AppContent({ auth }: { auth: AuthContextType }) {
   // Calendar - Atomic RSVP Handler via toggle_event_rsvp RPC
   const handleToggleRsvp = async (eventId: string) => {
     if (!user) {
-      setAuthMode('signin');
-      setAuthBannerMessage('Please sign in or create an account to RSVP.');
-      setShowAuthModal(true);
-      showToast('Please sign in or create an account to RSVP.');
+      openAuthModal({
+        mode: 'signin',
+        intent: { type: 'rsvp_event', eventId },
+        bannerMessage: 'Please sign in to reserve your spot and receive calendar updates.'
+      });
       return;
     }
 
@@ -744,22 +796,23 @@ function AppContent({ auth }: { auth: AuthContextType }) {
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!suEmail.trim() || !suPassword.trim()) {
+      setAuthErrorMessage('Please enter both email and password.');
       showToast('Please enter both email and password.');
       return;
     }
 
+    setAuthErrorMessage(null);
     try {
       if (authMode === 'signin') {
         await signIn(suEmail, suPassword);
         showToast('Successfully signed in!');
-        if (pendingCreateCommunity) {
-          setShowCreateModal(true);
-          setPendingCreateCommunity(false);
-          setAuthBannerMessage(null);
-        }
         setShowAuthModal(false);
+        setAuthBannerMessage(null);
+        setAuthErrorMessage(null);
+        await resumeAuthIntent(authIntent);
       } else {
         if (!suName.trim()) {
+          setAuthErrorMessage('Please provide your full name for sign up.');
           showToast('Please provide your full name for sign up.');
           return;
         }
@@ -771,17 +824,17 @@ function AppContent({ auth }: { auth: AuthContextType }) {
           showToast('Verification email sent!');
         } else {
           showToast('Welcome! Your profile has been created.');
-          if (pendingCreateCommunity) {
-            setShowCreateModal(true);
-            setPendingCreateCommunity(false);
-            setAuthBannerMessage(null);
-          }
           setShowAuthModal(false);
+          setAuthBannerMessage(null);
+          setAuthErrorMessage(null);
+          await resumeAuthIntent(authIntent);
         }
       }
     } catch (err: any) {
-      console.error(err);
-      showToast(err.message || 'Authentication transaction failed.');
+      console.error('Authentication error:', err);
+      const friendlyMsg = formatAuthError(err);
+      setAuthErrorMessage(friendlyMsg);
+      showToast(friendlyMsg);
     }
   };
 
@@ -1387,7 +1440,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
                             <span className="text-[11px] text-zinc-400 font-semibold">{comm.memberCount} members</span>
                             
                             <button
-                              onClick={(e) => handleJoinOrLeaveCommunity(comm.id, e)}
+                              onClick={(e) => handleJoinOrLeaveCommunity(comm.id, comm.name, e)}
                               className={`text-[10px] font-extrabold px-3 py-1.5 rounded-lg transition-all ${
                                 comm.isJoined
                                   ? 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-400'
@@ -1667,6 +1720,8 @@ function AppContent({ auth }: { auth: AuthContextType }) {
         verificationEmail={verificationEmail}
         setVerificationEmail={setVerificationEmail}
         authBannerMessage={authBannerMessage}
+        intent={authIntent}
+        errorMessage={authErrorMessage}
         suEmail={suEmail}
         setSuEmail={setSuEmail}
         suPassword={suPassword}

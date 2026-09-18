@@ -5,11 +5,13 @@ import { User } from '../types';
 interface LeaderboardTabProps {
   users: User[];
   currentUser: User;
+  onSelectUser?: (user: User) => void;
 }
 
 export const LeaderboardTab: React.FC<LeaderboardTabProps> = ({
   users,
-  currentUser
+  currentUser,
+  onSelectUser,
 }) => {
   const [timeframe, setTimeframe] = useState<'7d' | '30d' | 'all'>('7d');
 
@@ -114,10 +116,11 @@ export const LeaderboardTab: React.FC<LeaderboardTabProps> = ({
                 return (
                   <div 
                     key={user.id}
-                    className={`flex items-center justify-between p-4 transition-colors ${
+                    onClick={() => onSelectUser && onSelectUser(user)}
+                    className={`flex items-center justify-between p-4 transition-colors cursor-pointer group ${
                       isMe 
                         ? 'bg-indigo-50/20 dark:bg-zinc-900/40' 
-                        : 'hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20'
+                        : 'hover:bg-zinc-50/70 dark:hover:bg-zinc-900/40'
                     }`}
                   >
                     <div className="flex items-center gap-4 min-w-0">
@@ -128,7 +131,7 @@ export const LeaderboardTab: React.FC<LeaderboardTabProps> = ({
                       <img 
                         src={user.avatar} 
                         alt={user.name} 
-                        className="w-10 h-10 rounded-full object-cover border border-zinc-100 dark:border-zinc-800"
+                        className="w-10 h-10 rounded-full object-cover border border-zinc-100 dark:border-zinc-800 group-hover:ring-2 group-hover:ring-indigo-500/40 transition-all"
                       />
 
                       <div className="min-w-0">

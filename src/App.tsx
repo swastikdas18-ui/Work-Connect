@@ -52,6 +52,7 @@ import { AuthModal } from './components/AuthModal';
 import { CreateCommunityModal } from './components/CreateCommunityModal';
 import { EditProfileModal } from './components/EditProfileModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
+import { UserProfileModal } from './components/UserProfileModal';
 import { usePWAInstall } from './hooks/usePWAInstall';
 import { useAuth } from './lib/auth';
 import { 
@@ -161,6 +162,14 @@ export default function App() {
   const [upName, setUpName] = useState('');
   const [upHeadline, setUpHeadline] = useState('');
   const [upAvatar, setUpAvatar] = useState('');
+  const [upBio, setUpBio] = useState('');
+  const [upSkills, setUpSkills] = useState<string[]>([]);
+  const [upGithub, setUpGithub] = useState('');
+  const [upLinkedin, setUpLinkedin] = useState('');
+  const [upWebsite, setUpWebsite] = useState('');
+
+  // Public user profile viewer modal state
+  const [inspectingUser, setInspectingUser] = useState<User | null>(null);
 
   // Local alert alerts
   const [appNotifications, setAppNotifications] = useState([
@@ -740,10 +749,32 @@ export default function App() {
     }
   };
 
+  const openEditProfileModal = () => {
+    if (!user) return;
+    setUpName(user.full_name || '');
+    setUpHeadline(user.headline || '');
+    setUpAvatar(user.avatar_url || prebuiltAvatars[0]);
+    setUpBio(user.bio || '');
+    setUpSkills(user.skills || ['React', 'TypeScript']);
+    setUpGithub(user.github_url || '');
+    setUpLinkedin(user.linkedin_url || '');
+    setUpWebsite(user.website_url || '');
+    setShowProfileModal(true);
+  };
+
   const handleProfileUpdateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!upName.trim()) return;
-    await updateProfile(upName, upHeadline, upAvatar);
+    await updateProfile({
+      fullName: upName,
+      headline: upHeadline,
+      avatarUrl: upAvatar,
+      bio: upBio,
+      skills: upSkills,
+      githubUrl: upGithub,
+      linkedinUrl: upLinkedin,
+      websiteUrl: upWebsite,
+    });
     showToast('Your profile details have been updated.');
     setShowProfileModal(false);
   };
@@ -762,7 +793,7 @@ export default function App() {
     );
   }
 
-  const isAnyModalOpen = showCreateModal || showProfileModal || showSearchModal || showAuthModal;
+  const isAnyModalOpen = showCreateModal || showProfileModal || showSearchModal || showAuthModal || !!inspectingUser;
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 flex flex-col font-sans select-none antialiased">
@@ -1038,7 +1069,17 @@ export default function App() {
                         <button
                           onClick={() => {
                             setIsProfileDropdownOpen(false);
-                            setShowProfileModal(true);
+                            setInspectingUser(mappedCurrentUser);
+                          }}
+                          className="w-full text-left px-3 py-2 text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/40 rounded-lg transition-all flex items-center justify-between"
+                        >
+                          <span>View Public Profile</span>
+                          <span className="text-[10px] font-mono font-bold bg-indigo-100 dark:bg-indigo-900/60 px-1.5 py-0.5 rounded">Card</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsProfileDropdownOpen(false);
+                            openEditProfileModal();
                           }}
                           className="w-full text-left px-3 py-2 text-xs font-semibold text-zinc-700 hover:text-zinc-900 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-zinc-900 rounded-lg transition-all"
                         >
@@ -1382,6 +1423,7 @@ export default function App() {
                   currentUser={mappedCurrentUser}
                   leaderboardUsers={leaderboardUsers}
                   onOpenNewsletterComposeWithContent={handleOpenNewsletterComposeWithContent}
+                  onSelectUser={(u) => setInspectingUser(u)}
                 />
               )}
 
@@ -1410,6 +1452,7 @@ export default function App() {
                 <LeaderboardTab 
                   users={leaderboardUsers}
                   currentUser={mappedCurrentUser}
+                  onSelectUser={(u) => setInspectingUser(u)}
                 />
               )}
 
@@ -1510,8 +1553,30 @@ export default function App() {
         setUpHeadline={setUpHeadline}
         upAvatar={upAvatar}
         setUpAvatar={setUpAvatar}
+        upBio={upBio}
+        setUpBio={setUpBio}
+        upSkills={upSkills}
+        setUpSkills={setUpSkills}
+        upGithub={upGithub}
+        setUpGithub={setUpGithub}
+        upLinkedin={upLinkedin}
+        setUpLinkedin={setUpLinkedin}
+        upWebsite={upWebsite}
+        setUpWebsite={setUpWebsite}
         prebuiltAvatars={prebuiltAvatars}
         onSubmit={handleProfileUpdateSubmit}
+      />
+
+      {/* PUBLIC USER PROFILE DRAWER / MODAL */}
+      <UserProfileModal 
+        user={inspectingUser}
+        isOpen={!!inspectingUser}
+        onClose={() => setInspectingUser(null)}
+        isCurrentUser={inspectingUser?.id === mappedCurrentUser.id}
+        onEditProfile={() => {
+          setInspectingUser(null);
+          openEditProfileModal();
+        }}
       />
 
       {/* GLOBAL Cmd+K SEARCH MODAL */}

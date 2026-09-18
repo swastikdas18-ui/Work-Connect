@@ -9,6 +9,13 @@ export interface Profile {
   cohort_tag: string;
   karma_points: number;
   role: 'owner' | 'admin' | 'member';
+  bio?: string;
+  skills?: string[];
+  github_url?: string;
+  linkedin_url?: string;
+  website_url?: string;
+  banner_url?: string;
+  created_at?: string;
 }
 
 export interface Community {
@@ -726,13 +733,37 @@ import {
 } from '../types';
 
 export function mapProfileToUser(p: Profile): UIUser {
+  const points = p.karma_points || 0;
+  const level = Math.max(1, Math.floor(points / 300) + 1);
+  
+  // Calculate dynamic badges based on achievements, points and roles
+  const badges: string[] = [];
+  if (p.role === 'owner') badges.push('Founder');
+  else if (p.role === 'admin') badges.push('Lead');
+  else badges.push('Contributor');
+
+  if (points >= 1000) badges.push('Master');
+  else if (points >= 500) badges.push('Rising Star');
+  else badges.push('Explorer');
+
+  if (p.skills && p.skills.length > 0) badges.push('Specialist');
+
   return {
     id: p.id,
     name: p.full_name || 'Anonymous',
     avatar: p.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80',
     cohort: p.headline || p.cohort_tag || 'Member',
-    level: Math.max(1, Math.floor((p.karma_points || 0) / 300) + 1),
-    points: p.karma_points || 0
+    level,
+    points,
+    bio: p.bio || 'Passionate developer and continuous learner building great products with peers.',
+    skills: p.skills || ['React', 'TypeScript', 'Frontend'],
+    githubUrl: p.github_url || 'https://github.com',
+    linkedinUrl: p.linkedin_url || 'https://linkedin.com',
+    websiteUrl: p.website_url,
+    bannerUrl: p.banner_url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80',
+    badges,
+    role: p.role || 'member',
+    joinedAt: p.created_at || 'Jan 2026'
   };
 }
 

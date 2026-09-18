@@ -1,6 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { User as UserIcon, X } from 'lucide-react';
+import { 
+  User as UserIcon, 
+  X, 
+  Sparkles, 
+  Globe, 
+  Github, 
+  Linkedin, 
+  Plus, 
+  Tag, 
+  Image as ImageIcon,
+  Check
+} from 'lucide-react';
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -11,6 +22,16 @@ interface EditProfileModalProps {
   setUpHeadline: (headline: string) => void;
   upAvatar: string;
   setUpAvatar: (avatar: string) => void;
+  upBio?: string;
+  setUpBio?: (bio: string) => void;
+  upSkills?: string[];
+  setUpSkills?: (skills: string[]) => void;
+  upGithub?: string;
+  setUpGithub?: (github: string) => void;
+  upLinkedin?: string;
+  setUpLinkedin?: (linkedin: string) => void;
+  upWebsite?: string;
+  setUpWebsite?: (website: string) => void;
   prebuiltAvatars: string[];
   onSubmit: (e: React.FormEvent) => void;
 }
@@ -24,98 +45,358 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   setUpHeadline,
   upAvatar,
   setUpAvatar,
+  upBio = '',
+  setUpBio,
+  upSkills = [],
+  setUpSkills,
+  upGithub = '',
+  setUpGithub,
+  upLinkedin = '',
+  setUpLinkedin,
+  upWebsite = '',
+  setUpWebsite,
   prebuiltAvatars,
   onSubmit,
 }) => {
+  const [activeSection, setActiveSection] = useState<'info' | 'avatar' | 'skills' | 'social'>('info');
+  const [newSkillInput, setNewSkillInput] = useState('');
+  const [customAvatarUrl, setCustomAvatarUrl] = useState('');
+
+  const handleAddSkill = (e: React.KeyboardEvent | React.MouseEvent) => {
+    if ('key' in e && e.key !== 'Enter') return;
+    e.preventDefault();
+    const trimmed = newSkillInput.trim();
+    if (!trimmed || !setUpSkills) return;
+    if (!upSkills.includes(trimmed)) {
+      setUpSkills([...upSkills, trimmed]);
+    }
+    setNewSkillInput('');
+  };
+
+  const handleRemoveSkill = (skillToRemove: string) => {
+    if (!setUpSkills) return;
+    setUpSkills(upSkills.filter(s => s !== skillToRemove));
+  };
+
+  const handleApplyCustomAvatar = () => {
+    if (customAvatarUrl.trim()) {
+      setUpAvatar(customAvatarUrl.trim());
+      setCustomAvatarUrl('');
+    }
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
         <>
           <motion.div 
             initial={{ opacity: 0 }}
-            animate={{ opacity: 0.4 }}
+            animate={{ opacity: 0.5 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black z-50"
+            className="fixed inset-0 bg-black z-50 backdrop-blur-xs"
           />
           
           <motion.div 
-            initial={{ opacity: 0, scale: 0.95, y: -20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -20 }}
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-md bg-white dark:bg-zinc-900 rounded-2xl p-6 shadow-2xl border border-zinc-200 dark:border-zinc-800 z-50"
+            initial={{ opacity: 0, scale: 0.95, y: '-45%', x: '-50%' }}
+            animate={{ opacity: 1, scale: 1, y: '-50%', x: '-50%' }}
+            exit={{ opacity: 0, scale: 0.95, y: '-45%', x: '-50%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            className="fixed top-1/2 left-1/2 w-[92%] max-w-xl bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 z-50 overflow-hidden max-h-[90vh] flex flex-col"
           >
-            <div className="flex justify-between items-center pb-3 border-b border-zinc-100 dark:border-zinc-800">
-              <h3 className="text-base font-extrabold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
-                <UserIcon className="h-4.5 w-4.5 text-indigo-500" />
-                Your Profile Information
-              </h3>
+            {/* Modal Header */}
+            <div className="flex justify-between items-center px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400 flex items-center justify-center">
+                  <UserIcon className="h-4.5 w-4.5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-zinc-900 dark:text-zinc-100">
+                    Edit Profile Details
+                  </h3>
+                  <p className="text-[11px] text-zinc-400">Personalize how other cohort members see you</p>
+                </div>
+              </div>
               <button 
                 onClick={onClose}
-                className="text-zinc-400 hover:text-zinc-600"
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 rounded-lg"
               >
-                <X className="h-4.5 w-4.5" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            <form onSubmit={onSubmit} className="mt-4 space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Full Name</label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="e.g. Alex Rivera"
-                  value={upName}
-                  onChange={(e) => setUpName(e.target.value)}
-                  className="w-full text-xs font-semibold px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
-                />
-              </div>
+            {/* Quick Navigation Tabs */}
+            <div className="flex px-6 pt-3 border-b border-zinc-100 dark:border-zinc-800 gap-1 shrink-0 bg-zinc-50/50 dark:bg-zinc-900/50 overflow-x-auto">
+              {[
+                { id: 'info' as const, label: 'General Info' },
+                { id: 'avatar' as const, label: 'Avatar & Image' },
+                { id: 'skills' as const, label: 'Skills & Bio' },
+                { id: 'social' as const, label: 'Social Handles' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveSection(tab.id)}
+                  className={`px-3 py-2 text-xs font-bold whitespace-nowrap border-b-2 transition-all ${
+                    activeSection === tab.id
+                      ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+                      : 'border-transparent text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Headline / Cohort Title</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. Software Engineering Intern"
-                  value={upHeadline}
-                  onChange={(e) => setUpHeadline(e.target.value)}
-                  className="w-full text-xs font-semibold px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
-                />
+            {/* Live Mini Preview Bar */}
+            <div className="px-6 py-3 bg-zinc-50 dark:bg-zinc-850/40 border-b border-zinc-100 dark:border-zinc-800/80 flex items-center gap-3 shrink-0">
+              <img 
+                src={upAvatar} 
+                alt="Avatar Preview" 
+                className="h-10 w-10 rounded-xl object-cover ring-2 ring-indigo-500/20 shadow-xs"
+              />
+              <div className="min-w-0 flex-1">
+                <span className="text-xs font-bold text-zinc-900 dark:text-white block truncate">
+                  {upName || 'Your Name'}
+                </span>
+                <span className="text-[11px] text-zinc-500 dark:text-zinc-400 block truncate">
+                  {upHeadline || 'Your Cohort / Headline'}
+                </span>
               </div>
+              <span className="text-[10px] font-mono uppercase bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 px-2 py-0.5 rounded-md font-bold">
+                Live Preview
+              </span>
+            </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Select Avatar Icon</label>
-                <div className="flex items-center gap-2 justify-center py-2">
-                  {prebuiltAvatars.map((av) => (
-                    <button
-                      key={av}
-                      type="button"
-                      onClick={() => setUpAvatar(av)}
-                      className={`h-10 w-10 rounded-full overflow-hidden border-2 transition-all ${
-                        upAvatar === av ? 'border-indigo-500 scale-110 shadow' : 'border-transparent opacity-70 hover:opacity-100'
-                      }`}
-                    >
-                      <img src={av} alt="avatar option" className="h-full w-full object-cover" />
-                    </button>
-                  ))}
-                </div>
-              </div>
+            {/* Form Content Body */}
+            <form onSubmit={onSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
+              
+              {/* SECTION 1: General Info */}
+              {activeSection === 'info' && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                      Full Display Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="e.g. Alex Rivera"
+                      value={upName}
+                      onChange={(e) => setUpName(e.target.value)}
+                      className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                    />
+                  </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                      Headline / Cohort Role
+                    </label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. Software Engineering Intern"
+                      value={upHeadline}
+                      onChange={(e) => setUpHeadline(e.target.value)}
+                      className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                      About Me / Short Bio
+                    </label>
+                    <textarea 
+                      rows={3}
+                      placeholder="Share a few sentences about your background, what you are building, or what you want to learn..."
+                      value={upBio}
+                      onChange={(e) => setUpBio && setUpBio(e.target.value)}
+                      className="w-full text-xs font-medium px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200 resize-none leading-relaxed"
+                    />
+                  </div>
+                </motion.div>
+              )}
+
+              {/* SECTION 2: Avatar & Image */}
+              {activeSection === 'avatar' && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                      Choose From Curated Avatars
+                    </label>
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-3">
+                      {prebuiltAvatars.map((av) => {
+                        const isSelected = upAvatar === av;
+                        return (
+                          <button
+                            key={av}
+                            type="button"
+                            onClick={() => setUpAvatar(av)}
+                            className={`relative aspect-square rounded-2xl overflow-hidden border-2 transition-all group ${
+                              isSelected 
+                                ? 'border-indigo-600 scale-105 shadow-md' 
+                                : 'border-zinc-200 dark:border-zinc-700 opacity-70 hover:opacity-100'
+                            }`}
+                          >
+                            <img src={av} alt="avatar option" className="h-full w-full object-cover" />
+                            {isSelected && (
+                              <div className="absolute inset-0 bg-indigo-600/30 flex items-center justify-center">
+                                <Check className="h-4 w-4 text-white drop-shadow" />
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                      Or Custom Image URL
+                    </label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="url"
+                        placeholder="https://example.com/your-photo.jpg"
+                        value={customAvatarUrl}
+                        onChange={(e) => setCustomAvatarUrl(e.target.value)}
+                        className="flex-1 text-xs px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleApplyCustomAvatar}
+                        disabled={!customAvatarUrl.trim()}
+                        className="bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 text-xs font-bold px-4 py-2.5 rounded-xl disabled:opacity-50 transition-all"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* SECTION 3: Skills & Bio */}
+              {activeSection === 'skills' && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                      Add Technical Skills / Tags
+                    </label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text"
+                        placeholder="e.g. Next.js, Python, PostgreSQL, System Design"
+                        value={newSkillInput}
+                        onChange={(e) => setNewSkillInput(e.target.value)}
+                        onKeyDown={handleAddSkill}
+                        className="flex-1 text-xs px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddSkill}
+                        disabled={!newSkillInput.trim()}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl disabled:opacity-50 transition-all flex items-center gap-1"
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span>Add</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                      Active Skills ({upSkills.length})
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {upSkills.length === 0 ? (
+                        <p className="text-xs text-zinc-400 italic">No skills added yet. Type a skill above and press Add.</p>
+                      ) : (
+                        upSkills.map((skill) => (
+                          <span
+                            key={skill}
+                            className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-xl bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/50"
+                          >
+                            <span>{skill}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSkill(skill)}
+                              className="text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-200"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </span>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* SECTION 4: Social Handles */}
+              {activeSection === 'social' && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block flex items-center gap-1.5">
+                      <Github className="h-3.5 w-3.5" />
+                      <span>GitHub URL</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      placeholder="https://github.com/username"
+                      value={upGithub}
+                      onChange={(e) => setUpGithub && setUpGithub(e.target.value)}
+                      className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block flex items-center gap-1.5">
+                      <Linkedin className="h-3.5 w-3.5 text-sky-600" />
+                      <span>LinkedIn URL</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      placeholder="https://linkedin.com/in/username"
+                      value={upLinkedin}
+                      onChange={(e) => setUpLinkedin && setUpLinkedin(e.target.value)}
+                      className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block flex items-center gap-1.5">
+                      <Globe className="h-3.5 w-3.5 text-teal-600" />
+                      <span>Personal Portfolio / Website</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      placeholder="https://yourportfolio.dev"
+                      value={upWebsite}
+                      onChange={(e) => setUpWebsite && setUpWebsite(e.target.value)}
+                      className="w-full text-xs font-semibold px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                    />
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Bottom Submit Action Bar */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-100 dark:border-zinc-800 shrink-0">
                 <button 
                   type="button"
                   onClick={onClose}
-                  className="text-xs font-bold border border-zinc-200 text-zinc-600 px-4 py-2 rounded-xl hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-350"
+                  className="text-xs font-bold border border-zinc-200 text-zinc-600 px-4 py-2.5 rounded-xl hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-350"
                 >
                   Cancel
                 </button>
 
                 <button 
                   type="submit"
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-2 rounded-xl shadow-md transition-all"
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all flex items-center gap-1.5"
                 >
-                  Save Modifications
+                  <Sparkles className="h-4 w-4" />
+                  <span>Save Profile</span>
                 </button>
               </div>
+
             </form>
           </motion.div>
         </>

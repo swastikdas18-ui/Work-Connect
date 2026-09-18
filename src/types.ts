@@ -6,6 +6,15 @@ export interface User {
   level: number;
   points: number;
   rank?: number;
+  bio?: string;
+  skills?: string[];
+  githubUrl?: string;
+  linkedinUrl?: string;
+  websiteUrl?: string;
+  bannerUrl?: string;
+  badges?: string[];
+  role?: 'owner' | 'admin' | 'member';
+  joinedAt?: string;
 }
 
 export interface Comment {

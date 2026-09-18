@@ -41,6 +41,7 @@ interface CommunityTabProps {
   currentUser: User;
   leaderboardUsers: User[];
   onOpenNewsletterComposeWithContent?: (subject: string, content: string) => void;
+  onSelectUser?: (user: User) => void;
 }
 
 export const CommunityTab: React.FC<CommunityTabProps> = ({
@@ -55,7 +56,8 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
   onToggleBookmark,
   currentUser,
   leaderboardUsers,
-  onOpenNewsletterComposeWithContent
+  onOpenNewsletterComposeWithContent,
+  onSelectUser
 }) => {
   const [sortBy, setSortBy] = useState<'activity' | 'newest' | 'top'>('activity');
   const [showCreateBox, setShowCreateBox] = useState(false);
@@ -332,15 +334,18 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
                   >
                     {/* Card Header */}
                     <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
+                      <div 
+                        onClick={() => onSelectUser && onSelectUser(post.author)}
+                        className="flex items-center gap-3 cursor-pointer group"
+                      >
                         <img 
                           src={post.author.avatar} 
                           alt={post.author.name} 
-                          className="w-9 h-9 rounded-full object-cover"
+                          className="w-9 h-9 rounded-full object-cover group-hover:ring-2 group-hover:ring-indigo-500/40 transition-all"
                         />
                         <div>
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">{post.author.name}</span>
+                            <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{post.author.name}</span>
                             <span className="text-[10px] font-bold bg-zinc-50 text-zinc-500 px-1.5 py-0.2 rounded dark:bg-zinc-900 dark:text-zinc-400">{post.author.cohort}</span>
                           </div>
                           <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 mt-0.5">
@@ -460,11 +465,15 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
 
             <div className="space-y-2.5">
               {leaderboardUsers.slice(0, 3).map((user, idx) => (
-                <div key={user.id} className="flex items-center justify-between">
+                <div 
+                  key={user.id} 
+                  onClick={() => onSelectUser && onSelectUser(user)}
+                  className="flex items-center justify-between cursor-pointer p-1 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors group"
+                >
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-xs font-bold text-zinc-400 w-3">#{idx + 1}</span>
-                    <img src={user.avatar} alt={user.name} className="w-6.5 h-6.5 rounded-full object-cover" />
-                    <span className="text-xs font-bold text-zinc-700 truncate dark:text-zinc-300">{user.name}</span>
+                    <img src={user.avatar} alt={user.name} className="w-6.5 h-6.5 rounded-full object-cover group-hover:ring-1 group-hover:ring-indigo-500/50" />
+                    <span className="text-xs font-bold text-zinc-700 truncate dark:text-zinc-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{user.name}</span>
                   </div>
                   <span className="text-xs font-bold text-zinc-500 font-mono">{user.points}p</span>
                 </div>
@@ -528,11 +537,17 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
                       <img 
                         src={comment.author.avatar} 
                         alt={comment.author.name} 
-                        className="w-7.5 h-7.5 rounded-full object-cover"
+                        onClick={() => onSelectUser && onSelectUser(comment.author)}
+                        className="w-7.5 h-7.5 rounded-full object-cover cursor-pointer hover:ring-2 hover:ring-indigo-500/40 transition-all"
                       />
                       <div className="flex-1 bg-zinc-50 dark:bg-zinc-900 rounded-xl p-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{comment.author.name}</span>
+                          <span 
+                            onClick={() => onSelectUser && onSelectUser(comment.author)}
+                            className="text-xs font-bold text-zinc-800 dark:text-zinc-200 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                          >
+                            {comment.author.name}
+                          </span>
                           <span className="text-[9px] text-zinc-400">{comment.timestamp}</span>
                         </div>
                         <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1.5 leading-relaxed">{comment.content}</p>

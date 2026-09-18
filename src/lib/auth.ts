@@ -11,7 +11,16 @@ export interface AuthContextType {
   signUp: (email: string, password: string, fullName: string, headline: string, avatarUrl: string, role: 'owner' | 'admin' | 'member') => Promise<{ emailVerificationRequired: boolean; email?: string } | void>;
   signOut: () => Promise<void>;
   setRole: (role: 'owner' | 'admin' | 'member') => Promise<void>;
-  updateProfile: (fullName: string, headline: string, avatarUrl: string) => Promise<void>;
+  updateProfile: (data: {
+    fullName: string;
+    headline: string;
+    avatarUrl: string;
+    bio?: string;
+    skills?: string[];
+    githubUrl?: string;
+    linkedinUrl?: string;
+    websiteUrl?: string;
+  }) => Promise<void>;
 }
 
 const LOCAL_SESSION_KEY = 'wc_auth_session_profile';
@@ -218,9 +227,28 @@ export function useAuth() {
     await dbService.upsertProfile(updated);
   };
 
-  const updateProfile = async (fullName: string, headline: string, avatarUrl: string) => {
+  const updateProfile = async (data: {
+    fullName: string;
+    headline: string;
+    avatarUrl: string;
+    bio?: string;
+    skills?: string[];
+    githubUrl?: string;
+    linkedinUrl?: string;
+    websiteUrl?: string;
+  }) => {
     if (!user) return;
-    const updated = { ...user, full_name: fullName, headline, avatar_url: avatarUrl };
+    const updated: Profile = { 
+      ...user, 
+      full_name: data.fullName, 
+      headline: data.headline, 
+      avatar_url: data.avatarUrl,
+      bio: data.bio ?? user.bio,
+      skills: data.skills ?? user.skills,
+      github_url: data.githubUrl ?? user.github_url,
+      linkedin_url: data.linkedinUrl ?? user.linkedin_url,
+      website_url: data.websiteUrl ?? user.website_url,
+    };
     setUser(updated);
     if (!isSupabaseConfigured) {
       localStorage.setItem(LOCAL_MOCK_USER_KEY, JSON.stringify(updated));

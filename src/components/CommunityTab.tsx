@@ -23,7 +23,8 @@ import {
   Flame,
   Globe,
   Lock,
-  UserCheck
+  UserCheck,
+  Loader2
 } from 'lucide-react';
 import { Post, User, CalendarEvent, Community } from '../types';
 
@@ -70,6 +71,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
 
   // Search filter
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Filter posts belonging to active community AND search query AND category
   const filteredPosts = posts
@@ -92,24 +94,34 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
       return (b.upvotes + b.comments.length * 3) - (a.upvotes + a.comments.length * 3); // activity weight
     });
 
-  const handleSubmitPost = (e: React.FormEvent) => {
+  const handleSubmitPost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !content.trim()) return;
+    if (!title.trim() || !content.trim() || isSubmitting) return;
 
-    onAddPost({
-      title,
-      content,
-      codeSnippet: codeSnippet.trim() ? codeSnippet : undefined,
-      category: category === 'All' ? 'Discussions' : category
-    }, sendAsNewsletter);
+    setIsSubmitting(true);
+    try {
+      await onAddPost({
+        title,
+        content,
+        codeSnippet: codeSnippet.trim() ? codeSnippet : undefined,
+        category: category === 'All' ? 'Discussions' : category
+      }, sendAsNewsletter);
 
-    // Reset Form State
-    setTitle('');
-    setContent('');
-    setCodeSnippet('');
-    setCategory('All');
-    setSendAsNewsletter(false);
-    setShowCreateBox(false);
+      // Reset Form State
+      setTitle('');
+      setContent('');
+      setCodeSnippet('');
+      setCategory('All');
+      setSendAsNewsletter(false);
+      setShowCreateBox(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      // Keep submit disabled for 2 seconds (cooldown)
+      setTimeout(() => {
+        setIsSubmitting(false);
+      }, 2000);
+    }
   };
 
   const handleSubmitComment = (postId: string) => {
@@ -247,9 +259,11 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
 
                 <button 
                   type="submit"
-                  className="bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs px-4 py-2 rounded-lg transition-all dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                  disabled={isSubmitting}
+                  className="bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs px-4 py-2 rounded-lg transition-all dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Publish Post
+                  {isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  <span>{isSubmitting ? 'Publishing...' : 'Publish Post'}</span>
                 </button>
               </div>
             </motion.form>

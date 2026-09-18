@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Users, 
@@ -84,6 +84,27 @@ export default function App() {
   
   // Tab within the selected community
   const [activeTab, setActiveTab] = useState<'feed' | 'classroom' | 'events' | 'leaderboard' | 'newsletter'>('feed');
+
+  // Profile dropdown menu popover states
+  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+  const profileDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Upvote cooldown ref map
+  const upvoteCooldowns = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(event.target as Node)) {
+        setIsProfileDropdownOpen(false);
+      }
+    };
+    if (isProfileDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isProfileDropdownOpen]);
 
   // Database-driven reactive states
   const [dbLoading, setDbLoading] = useState<boolean>(false);
@@ -415,6 +436,16 @@ export default function App() {
   const handleUpvotePost = async (postId: string) => {
     if (!ensureUserAuthenticated('upvote posts')) return;
     if (!user) return;
+    
+    // 300ms upvote debounce / spam protection
+    if (upvoteCooldowns.current.has(postId)) {
+      return;
+    }
+    upvoteCooldowns.current.add(postId);
+    setTimeout(() => {
+      upvoteCooldowns.current.delete(postId);
+    }, 300);
+
     try {
       const postItem = posts.find(p => p.id === postId);
       if (!postItem) return;
@@ -439,9 +470,13 @@ export default function App() {
         showToast('Upvote removed.');
       }
       await loadDatabaseData();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      showToast('Failed to toggle upvote.');
+      if (err?.message && err.message.includes('Rate limit exceeded')) {
+        showToast("You're doing that too fast. Please wait a moment before trying again.");
+      } else {
+        showToast('Failed to toggle upvote.');
+      }
     }
   };
 
@@ -464,8 +499,13 @@ export default function App() {
 
       showToast('Response published successfully!');
       await loadDatabaseData();
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      if (e?.message && e.message.includes('Rate limit exceeded')) {
+        showToast("You're doing that too fast. Please wait a moment before trying again.");
+      } else {
+        showToast('Failed to submit comment.');
+      }
     }
   };
 
@@ -512,8 +552,13 @@ export default function App() {
       }
 
       await loadDatabaseData();
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      if (e?.message && e.message.includes('Rate limit exceeded')) {
+        showToast("You're doing that too fast. Please wait a moment before trying again.");
+      } else {
+        showToast('Failed to publish post.');
+      }
     }
   };
 
@@ -942,17 +987,95 @@ export default function App() {
 
             {/* Profile Level Widget with Edit Profile Trigger OR Sign In Action */}
             {user ? (
-              <div className="flex items-center gap-2 cursor-pointer" onClick={() => setShowProfileModal(true)}>
-                <div className="relative">
-                  <img 
-                    src={mappedCurrentUser.avatar} 
-                    alt={mappedCurrentUser.name} 
-                    className="w-7.5 h-7.5 rounded-full object-cover border border-zinc-200 dark:border-zinc-800 hover:scale-105 transition-transform"
-                  />
-                  <span className="absolute -bottom-1 -right-1 bg-amber-500 text-white text-[8px] font-bold h-3.5 w-3.5 rounded-full flex items-center justify-center border border-white dark:border-zinc-900">
-                    {mappedCurrentUser.level}
-                  </span>
-                </div>
+              <div className="relative" ref={profileDropdownRef}>
+                <button 
+                  onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+                  className="flex items-center gap-2 cursor-pointer focus:outline-none"
+                  id="profile-dropdown-trigger"
+                >
+                  <div className="relative">
+                    <img 
+                      src={mappedCurrentUser.avatar} 
+                      alt={mappedCurrentUser.name} 
+                      className="w-7.5 h-7.5 rounded-full object-cover border border-zinc-200 dark:border-zinc-800 hover:scale-105 transition-transform"
+                    />
+                    <span className="absolute -bottom-1 -right-1 bg-amber-500 text-white text-[8px] font-bold h-3.5 w-3.5 rounded-full flex items-center justify-center border border-white dark:border-zinc-900">
+                      {mappedCurrentUser.level}
+                    </span>
+                  </div>
+                </button>
+
+                <AnimatePresence>
+                  {isProfileDropdownOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 mt-2 w-72 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 overflow-hidden"
+                    >
+                      {/* Header Section: Name, Headline & Email */}
+                      <div className="p-4 border-b border-zinc-100 dark:border-zinc-850">
+                        <div className="font-bold text-zinc-900 dark:text-white truncate">
+                          {mappedCurrentUser.name}
+                        </div>
+                        {mappedCurrentUser.cohort && (
+                          <div className="text-xs text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                            {mappedCurrentUser.cohort}
+                          </div>
+                        )}
+                        <div className="text-xs text-zinc-400 dark:text-zinc-500 truncate mt-1">
+                          {session?.user?.email || `${mappedCurrentUser.name.toLowerCase().replace(/\s+/g, '')}@company.com`}
+                        </div>
+                      </div>
+
+                      {/* Quick Links Section */}
+                      <div className="p-1.5 space-y-0.5 border-b border-zinc-100 dark:border-zinc-850">
+                        <button
+                          onClick={() => {
+                            setIsProfileDropdownOpen(false);
+                            setShowProfileModal(true);
+                          }}
+                          className="w-full text-left px-3 py-2 text-xs font-semibold text-zinc-700 hover:text-zinc-900 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-zinc-900 rounded-lg transition-all"
+                        >
+                          Profile Settings
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsProfileDropdownOpen(false);
+                            setViewMode('portal');
+                            setSelectedCommunityId(null);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                          className="w-full text-left px-3 py-2 text-xs font-semibold text-zinc-700 hover:text-zinc-900 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-zinc-900 rounded-lg transition-all"
+                        >
+                          Your Communities
+                        </button>
+                      </div>
+
+                      {/* Log Out Button */}
+                      <div className="p-1.5">
+                        <button
+                          onClick={async () => {
+                            setIsProfileDropdownOpen(false);
+                            try {
+                              await signOut();
+                              setMemberships([]);
+                              setSelectedCommunityId(null);
+                              setViewMode('portal');
+                              showToast('Logged out successfully');
+                            } catch (err: any) {
+                              showToast('Failed to log out: ' + err.message);
+                            }
+                          }}
+                          className="w-full text-left px-3 py-2 text-xs font-bold text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40 rounded-lg transition-all"
+                        >
+                          Log Out
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             ) : (
               <div className="flex items-center gap-2">

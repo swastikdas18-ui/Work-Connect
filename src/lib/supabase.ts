@@ -164,6 +164,9 @@ async function wrapDbCall<T>(
     try {
       const { data, error } = await supabaseCall();
       if (error) {
+        if (error.message?.includes("Rate limit exceeded")) {
+          throw error;
+        }
         if (
           error.code === 'PGRST205' || 
           error.message?.includes("Could not find") || 
@@ -177,6 +180,9 @@ async function wrapDbCall<T>(
       }
       return data;
     } catch (err: any) {
+      if (err?.message?.includes("Rate limit exceeded")) {
+        throw err;
+      }
       if (
         err?.code === 'PGRST205' || 
         err?.message?.includes("Could not find") || 

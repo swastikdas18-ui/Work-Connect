@@ -57,6 +57,7 @@ import { usePWAInstall } from './hooks/usePWAInstall';
 import { useAuth, AuthContextType } from './lib/auth';
 import { CommunityProvider, useCommunity } from './context/CommunityContext';
 import { 
+  supabase,
   dbService, 
   getHydratedPosts, 
   getHydratedCourses, 
@@ -124,6 +125,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [courses, setCourses] = useState<CourseTrack[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [rsvpLoadingId, setRsvpLoadingId] = useState<string | null>(null);
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [leaderboardUsers, setLeaderboardUsers] = useState<User[]>([]);
 
@@ -655,26 +657,56 @@ function AppContent({ auth }: { auth: AuthContextType }) {
     }
   };
 
-  // Calendar - RSVP
-  const handleRSVPEvent = async (eventId: string) => {
+  // Calendar - Atomic RSVP Handler via toggle_event_rsvp RPC
+  const handleToggleRsvp = async (eventId: string) => {
     if (!user) {
-      showToast('Please sign in or create an account to RSVP.');
+      setAuthMode('signin');
+      setAuthBannerMessage('Please sign in or create an account to RSVP.');
       setShowAuthModal(true);
+      showToast('Please sign in or create an account to RSVP.');
       return;
     }
+
+    setRsvpLoadingId(eventId);
     try {
-      const { rsvped } = await dbService.toggleRSVP(eventId, user.id);
-      if (rsvped) {
-        showToast('RSVP confirmed! Added to your schedule.');
+      let rsvped: boolean;
+      let attendees_count: number;
+
+      if (isSupabaseConfigured) {
+        const { data, error } = await supabase.rpc('toggle_event_rsvp', {
+          target_event_id: eventId,
+        });
+
+        if (error) throw error;
+        rsvped = data.rsvped;
+        attendees_count = data.attendees_count;
       } else {
-        showToast('RSVP cancelled successfully.');
+        const res = await dbService.toggleRSVP(eventId, user.id);
+        rsvped = res.rsvped;
+        attendees_count = res.attendees_count;
       }
-      if (selectedCommunityId) {
-        await loadCommunitySubcollections(selectedCommunityId);
-      }
-    } catch (e) {
-      console.error('RSVP Error:', e);
-      showToast('Failed to register RSVP.');
+
+      // Update state using the authoritative count and status from Postgres
+      setEvents((prevEvents) =>
+        prevEvents.map((event) =>
+          event.id === eventId
+            ? {
+                ...event,
+                is_rsvped: rsvped,
+                attendees_count: attendees_count,
+                hasRSVPed: rsvped,
+                attendees: attendees_count,
+              }
+            : event
+        )
+      );
+
+      showToast(rsvped ? 'RSVP confirmed! Added to your schedule.' : 'RSVP cancelled.');
+    } catch (err: any) {
+      console.error('RSVP toggle error:', err);
+      showToast(err?.message || 'Unable to update RSVP. Please try again.');
+    } finally {
+      setRsvpLoadingId(null);
     }
   };
 
@@ -1444,7 +1476,8 @@ function AppContent({ auth }: { auth: AuthContextType }) {
                 <CalendarTab 
                   events={communityEvents}
                   isAdminOrOwner={isAdminOrOwner}
-                  onRSVP={handleRSVPEvent}
+                  onRSVP={handleToggleRsvp}
+                  rsvpLoadingId={rsvpLoadingId}
                   onShowNotification={showToast}
                   onAddEvent={handleAddEvent}
                 />

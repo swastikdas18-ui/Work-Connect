@@ -467,32 +467,6 @@ export const dbService = {
     );
   },
 
-  async rsvpEvent(eventId: string, increment: number): Promise<void> {
-    return wrapDbCall(
-      async () => {
-        const { data, error: selectErr } = await supabase
-          .from('events')
-          .select('attendees_count')
-          .eq('id', eventId)
-          .single();
-        if (selectErr) return { data: null, error: selectErr };
-        const currentCount = data?.attendees_count || 0;
-        return supabase
-          .from('events')
-          .update({ attendees_count: currentCount + increment })
-          .eq('id', eventId);
-      },
-      () => {
-        const events = getLocalData<Event[]>('events', []);
-        const index = events.findIndex(e => e.id === eventId);
-        if (index >= 0) {
-          events[index].attendees_count += increment;
-          setLocalData('events', events);
-        }
-      }
-    );
-  },
-
   async listEventRSVPs(userId: string): Promise<EventRSVP[]> {
     return wrapDbCall(
       () => supabase.from('event_rsvps').select('*').eq('user_id', userId),
@@ -503,64 +477,20 @@ export const dbService = {
     );
   },
 
-  async toggleRSVP(eventId: string, userId: string): Promise<{ rsvped: boolean }> {
+  async toggleRSVP(eventId: string, userId: string): Promise<{ rsvped: boolean; attendees_count: number }> {
     return wrapDbCall(
       async () => {
-        // Check if RSVP already exists
-        const { data: existing, error: findError } = await supabase
-          .from('event_rsvps')
-          .select('*')
-          .eq('event_id', eventId)
-          .eq('user_id', userId)
-          .maybeSingle();
-
-        if (findError) return { data: null, error: findError };
-
-        if (existing) {
-          // Delete RSVP row
-          const { error: deleteError } = await supabase
-            .from('event_rsvps')
-            .delete()
-            .eq('event_id', eventId)
-            .eq('user_id', userId);
-
-          if (deleteError) return { data: null, error: deleteError };
-
-          // Decrement attendees_count
-          const { data: eventData } = await supabase
-            .from('events')
-            .select('attendees_count')
-            .eq('id', eventId)
-            .single();
-          const currentCount = eventData?.attendees_count || 0;
-          await supabase
-            .from('events')
-            .update({ attendees_count: Math.max(0, currentCount - 1) })
-            .eq('id', eventId);
-
-          return { data: { rsvped: false }, error: null };
-        } else {
-          // Insert RSVP row
-          const { error: insertError } = await supabase
-            .from('event_rsvps')
-            .insert({ event_id: eventId, user_id: userId });
-
-          if (insertError) return { data: null, error: insertError };
-
-          // Increment attendees_count
-          const { data: eventData } = await supabase
-            .from('events')
-            .select('attendees_count')
-            .eq('id', eventId)
-            .single();
-          const currentCount = eventData?.attendees_count || 0;
-          await supabase
-            .from('events')
-            .update({ attendees_count: currentCount + 1 })
-            .eq('id', eventId);
-
-          return { data: { rsvped: true }, error: null };
-        }
+        const { data, error } = await supabase.rpc('toggle_event_rsvp', {
+          target_event_id: eventId,
+        });
+        if (error) return { data: null, error };
+        return {
+          data: {
+            rsvped: Boolean(data?.rsvped),
+            attendees_count: Number(data?.attendees_count ?? 0),
+          },
+          error: null,
+        };
       },
       () => {
         const rsvps = getLocalData<EventRSVP[]>('event_rsvps', []);
@@ -585,7 +515,8 @@ export const dbService = {
 
         setLocalData('event_rsvps', rsvps);
         setLocalData('events', events);
-        return { rsvped };
+        const attendees_count = eventIdx >= 0 ? events[eventIdx].attendees_count : (rsvped ? 1 : 0);
+        return { rsvped, attendees_count };
       }
     );
   },
@@ -927,7 +858,9 @@ export async function getHydratedEvents(communityId: string, currentUserId?: str
       },
       zoomUrl: e.meet_url,
       attendees: e.attendees_count || 0,
-      hasRSVPed
+      attendees_count: e.attendees_count || 0,
+      hasRSVPed,
+      is_rsvped: hasRSVPed
     };
   });
 }

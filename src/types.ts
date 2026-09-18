@@ -74,6 +74,8 @@ export interface CalendarEvent {
   zoomUrl: string;
   attendees: number;
   hasRSVPed?: boolean;
+  attendees_count?: number;
+  is_rsvped?: boolean;
 }
 
 export interface Broadcast {

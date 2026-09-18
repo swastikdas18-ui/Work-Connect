@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, Clock, Video, User, Check, Users, Plus, X } from 'lucide-react';
+import { Calendar, Clock, Video, User, Check, Users, Plus, X, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CalendarEvent } from '../types';
 
@@ -20,6 +20,7 @@ interface CalendarTabProps {
   events: CalendarEvent[];
   isAdminOrOwner: boolean;
   onRSVP: (eventId: string) => void;
+  rsvpLoadingId?: string | null;
   onShowNotification: (message: string, type: 'success' | 'info') => void;
   onAddEvent: (title: string, description: string, startsAtIso: string, meetUrl: string) => void;
 }
@@ -28,6 +29,7 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({
   events,
   isAdminOrOwner,
   onRSVP,
+  rsvpLoadingId,
   onShowNotification,
   onAddEvent
 }) => {
@@ -154,7 +156,7 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({
                     {formatEventDate(event.date)}
                   </span>
 
-                  {event.hasRSVPed && (
+                  {(event.is_rsvped ?? event.hasRSVPed) && (
                     <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full dark:bg-emerald-950/40 dark:text-emerald-400">
                       <Check className="h-3 w-3" />
                       RSVP Registered
@@ -187,19 +189,29 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({
               <div className="mt-6 pt-4 border-t border-zinc-100 flex items-center justify-between gap-3 dark:border-zinc-850">
                 <div className="flex items-center gap-1.5 text-xs text-zinc-400">
                   <Users className="h-3.5 w-3.5" />
-                  <span>{event.attendees} attending</span>
+                  <span>{event.attendees_count ?? event.attendees} attending</span>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
+                    disabled={rsvpLoadingId === event.id}
                     onClick={() => onRSVP(event.id)}
-                    className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${
-                      event.hasRSVPed
+                    className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 ${
+                      (event.is_rsvped ?? event.hasRSVPed)
                         ? 'bg-emerald-50 border-emerald-100 text-emerald-600 dark:bg-emerald-950/20 dark:border-emerald-900 dark:text-emerald-400'
-                        : 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50 dark:bg-zinc-950 dark:border-zinc-800 dark:text-zinc-300'
-                    }`}
+                        : 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50 dark:bg-zinc-950 dark:border-zinc-850 dark:text-zinc-300'
+                    } ${rsvpLoadingId === event.id ? 'opacity-70 cursor-not-allowed' : ''}`}
                   >
-                    {event.hasRSVPed ? 'RSVPed ✓' : 'RSVP'}
+                    {rsvpLoadingId === event.id ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <span>Updating...</span>
+                      </>
+                    ) : (event.is_rsvped ?? event.hasRSVPed) ? (
+                      'RSVPed ✓'
+                    ) : (
+                      'RSVP'
+                    )}
                   </button>
 
                   <button

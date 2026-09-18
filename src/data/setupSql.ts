@@ -269,4 +269,52 @@ begin
   return json_build_object('success', true, 'action', action_taken, 'upvotes_count', current_count);
 end;
 $$ language plpgsql security definer;
+
+
+-- ==========================================================
+-- 6. ATOMIC IDEMPOTENT EVENT RSVP TRANSACTION
+-- ==========================================================
+create or replace function public.toggle_event_rsvp(target_event_id uuid)
+returns json as $$
+declare
+  calling_user_id uuid;
+  existing_id uuid;
+  current_attendees integer;
+  is_now_rsvped boolean;
+begin
+  calling_user_id := auth.uid();
+  if calling_user_id is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select id into existing_id 
+  from public.event_rsvps 
+  where event_id = target_event_id and user_id = calling_user_id;
+
+  if existing_id is not null then
+    -- Cancel RSVP
+    delete from public.event_rsvps where id = existing_id;
+    update public.events 
+    set attendees_count = greatest(0, attendees_count - 1) 
+    where id = target_event_id
+    returning attendees_count into current_attendees;
+    is_now_rsvped := false;
+  else
+    -- Register RSVP
+    insert into public.event_rsvps (event_id, user_id) 
+    values (target_event_id, calling_user_id);
+    update public.events 
+    set attendees_count = attendees_count + 1 
+    where id = target_event_id
+    returning attendees_count into current_attendees;
+    is_now_rsvped := true;
+  end if;
+
+  return json_build_object(
+    'success', true, 
+    'rsvped', is_now_rsvped, 
+    'attendees_count', current_attendees
+  );
+end;
+$$ language plpgsql security definer;
 `;

@@ -234,9 +234,12 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
 
           {/* Clean Composer Trigger Placeholder */}
           {!showCreateBox ? (
-            <div 
+            <button 
+              type="button"
+              id="post-composer-trigger"
+              data-testid="post-composer-trigger"
               onClick={() => setShowCreateBox(true)}
-              className="bg-white rounded-xl border border-zinc-200/80 p-4 shadow-sm cursor-pointer flex items-center gap-3 hover:border-zinc-300 transition-all dark:bg-zinc-950 dark:border-zinc-850"
+              className="w-full text-left bg-white rounded-xl border border-zinc-200/80 p-4 shadow-sm cursor-pointer flex items-center gap-3 hover:border-zinc-300 transition-all dark:bg-zinc-950 dark:border-zinc-850"
             >
               <img 
                 src={currentUser.avatar} 
@@ -246,7 +249,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
               <div className="flex-1 text-zinc-400 text-xs font-medium bg-zinc-50 dark:bg-zinc-900/60 rounded-lg px-4 py-2 border border-zinc-100 dark:border-zinc-800">
                 Write a thought, question, or win...
               </div>
-            </div>
+            </button>
           ) : (
             <motion.form 
               initial={{ opacity: 0, y: -8 }}

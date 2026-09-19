@@ -9,15 +9,21 @@ test.describe('Spec 04: Feed Upvotes, Spam Throttle & Rate Limits', () => {
     await expect(exploreGrid).toBeVisible();
     await exploreGrid.locator('> div').first().click();
 
-    // Open post composer if collapsed
-    const composerTrigger = page.locator('text=Write a thought, question, or win...');
-    if (await composerTrigger.isVisible()) {
-      await composerTrigger.click();
+    // Wait for streamlined community view to mount
+    await expect(page.locator('#streamlined-community-view')).toBeVisible({ timeout: 10000 });
+
+    // Open post composer
+    const composerBox = page.locator('#post-composer-trigger');
+    const firstPostBtn = page.getByRole('button', { name: /Publish First Post/i });
+    if (await composerBox.isVisible()) {
+      await composerBox.click();
+    } else if (await firstPostBtn.isVisible()) {
+      await firstPostBtn.click();
     }
 
     // Fill post title and content
     const titleInput = page.locator('input[placeholder="Post title..."]');
-    await expect(titleInput).toBeVisible();
+    await expect(titleInput).toBeVisible({ timeout: 10000 });
     await titleInput.fill('Milestone Demo: Production RPC Gateway');
 
     const contentTextarea = page.locator('textarea[placeholder*="thoughts"], textarea[placeholder*="details"]').first();
@@ -26,7 +32,13 @@ test.describe('Spec 04: Feed Upvotes, Spam Throttle & Rate Limits', () => {
     // Select category "Wins & Demos" if available
     const categorySelect = page.locator('select').first();
     if (await categorySelect.isVisible()) {
-      await categorySelect.selectOption({ label: 'Wins & Demos' }).catch(() => {});
+      await categorySelect.selectOption({ label: 'Wins & Demos' }, { timeout: 2000 }).catch(async () => {
+        const winOption = categorySelect.locator('option').filter({ hasText: /Win/i }).first();
+        if (await winOption.count() > 0) {
+          const val = await winOption.getAttribute('value');
+          if (val) await categorySelect.selectOption(val);
+        }
+      });
     }
 
     // Submit post
@@ -55,9 +67,11 @@ test.describe('Spec 04: Feed Upvotes, Spam Throttle & Rate Limits', () => {
     }
 
     // Assert count change is exactly ±1
-    await page.waitForTimeout(300);
-    const updatedCount = parseInt((await upvoteBtn.textContent())?.trim() || '0', 10);
-    expect(Math.abs(updatedCount - initialCount)).toBe(1);
+    await expect.poll(async () => {
+      const text = await upvoteBtn.textContent();
+      const updatedCount = parseInt(text?.trim() || '0', 10);
+      return Math.abs(updatedCount - initialCount);
+    }).toBe(1);
   });
 
   test('4.3: Rapid 3 clicks within 200ms on upvote button throttled by 300ms debounce', async ({ page, authenticatedUser }) => {

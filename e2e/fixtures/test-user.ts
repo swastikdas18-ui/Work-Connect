@@ -63,6 +63,29 @@ export async function injectAuthenticatedSession(page: Page, customUser?: Partia
           },
         ];
         localStorage.setItem('wc_cached_memberships', JSON.stringify(initialMemberships));
+
+        // Ensure default community exists in cache if not present
+        const defaultTestCommunities = [
+          {
+            id: 'comm-eng-core',
+            name: 'Core Engineering & Platform',
+            slug: 'core-eng',
+            description: 'Engineering systems, dev infrastructure, and production reliability.',
+            privacy: 'public',
+            accentColor: '#4f46e5',
+            memberCount: 42,
+            bannerUrl: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=600&q=80',
+            isJoined: true,
+            created_by: profile.id,
+            createdBy: profile.id
+          }
+        ];
+        if (!localStorage.getItem('wc_cached_communities')) {
+          localStorage.setItem('wc_cached_communities', JSON.stringify(defaultTestCommunities));
+        }
+        if (!localStorage.getItem('wc_db_communities')) {
+          localStorage.setItem('wc_db_communities', JSON.stringify(defaultTestCommunities));
+        }
       } catch (err) {
         console.error('Failed to inject auth into localStorage:', err);
       }

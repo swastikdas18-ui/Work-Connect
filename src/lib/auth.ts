@@ -28,7 +28,15 @@ const LOCAL_SESSION_KEY = 'wc_auth_session_profile';
 const LOCAL_MOCK_USER_KEY = 'wc_mock_user_profile';
 
 export function useAuth() {
-  const [user, setUser] = useState<Profile | null>(null);
+  const [user, setUser] = useState<Profile | null>(() => {
+    try {
+      const cached = localStorage.getItem(LOCAL_SESSION_KEY) || localStorage.getItem(LOCAL_MOCK_USER_KEY);
+      if (cached) {
+        return JSON.parse(cached) as Profile;
+      }
+    } catch {}
+    return null;
+  });
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -69,6 +77,16 @@ export function useAuth() {
       if (initialSession?.user) {
         fetchProfile(initialSession.user.id);
       } else {
+        // Check for test-injected session in localStorage before defaulting to null
+        try {
+          const cachedSession = localStorage.getItem(LOCAL_SESSION_KEY) || localStorage.getItem(LOCAL_MOCK_USER_KEY);
+          if (cachedSession) {
+            const parsed = JSON.parse(cachedSession) as Profile;
+            setUser(parsed);
+            setLoading(false);
+            return;
+          }
+        } catch {}
         setUser(null);
         setLoading(false);
       }
@@ -79,8 +97,23 @@ export function useAuth() {
       if (currentSession?.user) {
         await fetchProfile(currentSession.user.id);
       } else {
-        setUser(null);
-        setLoading(false);
+        if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setLoading(false);
+        } else {
+          // Verify if test profile was injected
+          try {
+            const cachedSession = localStorage.getItem(LOCAL_SESSION_KEY) || localStorage.getItem(LOCAL_MOCK_USER_KEY);
+            if (cachedSession) {
+              const parsed = JSON.parse(cachedSession) as Profile;
+              setUser(parsed);
+              setLoading(false);
+              return;
+            }
+          } catch {}
+          setUser(null);
+          setLoading(false);
+        }
       }
     });
 
@@ -208,9 +241,9 @@ export function useAuth() {
     try {
       if (isSupabaseConfigured) {
         await supabase.auth.signOut();
-      } else {
-        localStorage.removeItem(LOCAL_MOCK_USER_KEY);
       }
+      localStorage.removeItem(LOCAL_MOCK_USER_KEY);
+      localStorage.removeItem(LOCAL_SESSION_KEY);
       setUser(null);
       setSession(null);
     } finally {

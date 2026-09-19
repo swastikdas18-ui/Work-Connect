@@ -1049,7 +1049,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
             {viewMode === 'community' ? (
               <button 
                 onClick={handleBackToPortal}
-                className="flex items-center gap-1.5 text-xs font-bold text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200 px-3 py-2 rounded-xl transition-all dark:text-zinc-300 dark:hover:text-white dark:bg-zinc-900 dark:hover:bg-zinc-800 shadow-sm"
+                className="flex items-center gap-1.5 text-xs font-bold text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200 px-3 py-2 min-h-[36px] rounded-xl transition-all dark:text-zinc-300 dark:hover:text-white dark:bg-zinc-900 dark:hover:bg-zinc-800 shadow-sm"
                 id="back-to-portal-breadcrumb"
               >
                 <span>← Back to Portal</span>

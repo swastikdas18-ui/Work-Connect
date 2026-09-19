@@ -13,7 +13,7 @@ test.describe('Spec 01: Auth Gating & Intent Resumption', () => {
 
     // Wait for the app root and discovery hero to load
     await expect(page.locator('text=Where Teams, Cohorts & Interns Build')).toBeVisible();
-    await expect(page.locator('text=Explore Communities')).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Explore Communities/i })).toBeVisible();
 
     // Critical requirement: Suppress "Back online. Sync completed!" toast on initial mount
     const backOnlineToast = page.locator('text=Back online. Sync completed!');
@@ -54,7 +54,7 @@ test.describe('Spec 01: Auth Gating & Intent Resumption', () => {
 
     // AuthModal should open with "Join [Community Name]"
     if (communityName) {
-      await expect(page.locator(`text=Join ${communityName}`)).toBeVisible();
+      await expect(page.getByRole('heading', { name: `Join ${communityName}` })).toBeVisible();
     } else {
       await expect(page.locator('h2:has-text("Join ")')).toBeVisible();
     }
@@ -78,8 +78,8 @@ test.describe('Spec 01: Auth Gating & Intent Resumption', () => {
     await emailInput.fill('invalid-email-format');
     await passwordInput.fill('short');
 
-    // Click Continue
-    const submitBtn = page.getByRole('button', { name: /Continue/i });
+    // Click submit button in auth form
+    const submitBtn = page.locator('form button[type="submit"]').first();
     await submitBtn.click();
 
     // Verify error messaging never leaks raw Supabase errors

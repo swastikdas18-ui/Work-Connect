@@ -32,7 +32,10 @@ test.describe('Spec 02: Persistent Community Store & Portal State Cache', () => 
     await page.goto('/');
 
     // Ensure the page has loaded and populated cache
-    await page.waitForTimeout(500);
+    await page.waitForFunction(() => {
+      const data = localStorage.getItem('wc_cached_communities');
+      return data !== null && JSON.parse(data).length > 0;
+    }, { timeout: 10000 });
 
     const cachedData = await page.evaluate(() => {
       return localStorage.getItem('wc_cached_communities');

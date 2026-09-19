@@ -676,60 +676,32 @@ function AppContent({ auth }: { auth: AuthContextType }) {
         }
       }
 
-      if (isSupabaseConfigured) {
-        const { data: newPost, error } = await supabase.rpc('create_post_with_rate_limit', {
-          p_community_id: selectedCommunityId,
-          p_category: postData.category,
-          p_title: postData.title.trim(),
-          p_body: postData.content.trim(),
-        });
-
-        if (error) {
-          if (error.message?.includes('RATE_LIMIT_EXCEEDED') || error.message?.toLowerCase().includes('rate limit')) {
-            showToast('You are doing that a bit too fast. Please wait a few seconds.');
-            return;
-          }
-          // Fallback to dbService.createPost if RPC missing
-          if (error.code === 'PGRST202' || error.message?.includes('function') || error.message?.includes('does not exist')) {
-            const fallbackPostId = generateId('p');
-            createdPostRecord = await dbService.createPost({
-              id: fallbackPostId,
-              community_id: selectedCommunityId,
-              author_id: user.id,
-              category: postData.category,
-              title: postData.title.trim(),
-              body: postData.content.trim(),
-              media_url: resolvedMediaUrl,
-              upvotes_count: 0,
-              comments_count: 0,
-              created_at: new Date().toISOString()
-            });
-          } else {
-            showToast(error.message || 'Failed to publish post.');
-            return;
-          }
-        } else {
-          createdPostRecord = newPost;
-          if (resolvedMediaUrl && newPost?.id) {
-            await supabase.from('posts').update({ media_url: resolvedMediaUrl }).eq('id', newPost.id);
-            createdPostRecord.media_url = resolvedMediaUrl;
-          }
-        }
-      } else {
-        const localPostId = generateId('p');
-        createdPostRecord = await dbService.createPost({
-          id: localPostId,
-          community_id: selectedCommunityId,
-          author_id: user.id,
-          category: postData.category,
-          title: postData.title.trim(),
-          body: postData.content.trim(),
-          media_url: resolvedMediaUrl,
-          upvotes_count: 0,
-          comments_count: 0,
-          created_at: new Date().toISOString()
-        });
+      if (!isSupabaseConfigured) {
+        showToast('Supabase is not configured. Cannot publish posts.');
+        return;
       }
+
+      const { data: newPost, error } = await supabase.rpc('create_post_with_rate_limit', {
+        p_community_id: selectedCommunityId,
+        p_category: postData.category,
+        p_title: postData.title.trim(),
+        p_body: postData.content.trim(),
+        p_image_url: resolvedMediaUrl || null,
+      });
+
+      if (error) {
+        if (
+          error.message?.includes('RATE_LIMIT_EXCEEDED') ||
+          error.message?.toLowerCase().includes('rate limit')
+        ) {
+          showToast('You are doing that a bit too fast. Please wait a few seconds.');
+          return;
+        }
+        showToast(error.message || 'Failed to publish post.');
+        return;
+      }
+
+      createdPostRecord = newPost;
 
       // Prepend newly created post to active feed (initialized at 0 upvotes)
       const formattedNewPost: Post = {

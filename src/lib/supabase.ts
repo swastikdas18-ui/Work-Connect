@@ -339,30 +339,11 @@ export const dbService = {
           p_category: post.category,
           p_title: post.title.trim(),
           p_body: post.body.trim(),
+          p_image_url: post.media_url || null,
         });
 
         if (error) {
-          // If RPC not found (e.g. migration pending or local test), fallback to direct table insert
-          if (
-            error.code === 'PGRST202' ||
-            error.message?.includes('function') ||
-            error.message?.includes('does not exist')
-          ) {
-            console.warn('RPC create_post_with_rate_limit not found, falling back to direct insert:', error);
-            return supabase.from('posts').insert(post).select().single();
-          }
           throw error;
-        }
-
-        // If media_url was provided, update the created post
-        if (post.media_url && newPost?.id) {
-          const { data: updatedPost } = await supabase
-            .from('posts')
-            .update({ media_url: post.media_url })
-            .eq('id', newPost.id)
-            .select()
-            .single();
-          if (updatedPost) return { data: updatedPost, error: null };
         }
 
         return { data: newPost, error: null };

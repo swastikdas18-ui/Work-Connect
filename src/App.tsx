@@ -376,21 +376,17 @@ function AppContent({ auth }: { auth: AuthContextType }) {
   const communityEvents = events.filter(e => e.communityId === selectedCommunityId);
   const communityBroadcasts = broadcasts.filter(b => b.communityId === selectedCommunityId);
 
-  // Fallback to cached memberships if user is authenticated (Defensive Filtering)
-  const userJoinedCommunityIds = useMemo(() => {
-    if (!user) return new Set<string>();
-    return new Set(memberships.map((m) => m.community_id));
-  }, [memberships, user]);
-
+  // Safely derive joined hubs matching exact requirements
   const yourCommunities = useMemo(() => {
     if (!user) return [];
+    const joinedIds = new Set(memberships.map((m) => m.community_id));
     return communities.filter((c) => 
       c.created_by === user.id || 
       c.createdBy === user.id || 
-      userJoinedCommunityIds.has(c.id) ||
+      joinedIds.has(c.id) ||
       Boolean(c.isJoined)
     );
-  }, [communities, user, userJoinedCommunityIds]);
+  }, [communities, memberships, user]);
 
   const exploreCommunities = useMemo(() => {
     return communities.filter(c => {

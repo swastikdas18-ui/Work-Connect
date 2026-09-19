@@ -90,16 +90,20 @@ export const CommunityProvider: React.FC<CommunityProviderProps> = ({ children, 
 
   // Fetch communities & memberships with cache-first and stale-while-revalidate
   const refreshCommunities = useCallback(async (silent = true) => {
+    // Only show global loading spinner if we literally have zero cached communities
     if (!silent && globalCommunitiesCache.length === 0) {
       setLoading(true);
     }
 
     try {
-      const rawComm = await dbService.listCommunities();
       const currentUser = currentUserRef.current;
-      const userMemberships = currentUser ? await dbService.getMemberships(currentUser.id) : [];
+      const [rawComm, userMemberships] = await Promise.all([
+        dbService.listCommunities(),
+        currentUser ? dbService.getMemberships(currentUser.id) : Promise.resolve([])
+      ]);
 
-      if (currentUser && userMemberships && userMemberships.length > 0) {
+      // 1. Process memberships
+      if (currentUser && Array.isArray(userMemberships)) {
         globalMembershipsCache = userMemberships;
         setMembershipsState(userMemberships);
         try {
@@ -107,10 +111,9 @@ export const CommunityProvider: React.FC<CommunityProviderProps> = ({ children, 
         } catch {}
       }
 
-      // CRUCIAL: Only update communities if rawComm is non-empty!
-      // NEVER wipe communities to [] if we already have communities in memory!
-      if (rawComm && rawComm.length > 0) {
-        const activeMemberships = (currentUser && userMemberships && userMemberships.length > 0)
+      // 2. Process communities with SWR logic
+      if (Array.isArray(rawComm) && rawComm.length > 0) {
+        const activeMemberships = (currentUser && Array.isArray(userMemberships))
           ? userMemberships
           : globalMembershipsCache;
         const joinedIds = new Set(activeMemberships.map((m) => m.community_id));
@@ -128,15 +131,21 @@ export const CommunityProvider: React.FC<CommunityProviderProps> = ({ children, 
           localStorage.setItem(LOCAL_STORAGE_COMMUNITIES_KEY, JSON.stringify(mappedCommunities));
         } catch {}
       } else if (globalCommunitiesCache.length > 0) {
+        // Retain existing cached communities if remote query returns empty or failed
         setCommunitiesState([...globalCommunitiesCache]);
+        setIsInitialized(true);
+      } else if (Array.isArray(rawComm)) {
+        // Legitimate empty database on cold start
+        setCommunitiesState([]);
         setIsInitialized(true);
       }
     } catch (err) {
-      console.warn('Silent community revalidation failed, preserving cached communities:', err);
+      console.warn('[CommunityContext] Silent revalidation error, retaining cached records:', err);
+      // Retain existing cached communities on network error
       if (globalCommunitiesCache.length > 0) {
         setCommunitiesState([...globalCommunitiesCache]);
-        setIsInitialized(true);
       }
+      setIsInitialized(true);
     } finally {
       setLoading(false);
     }
@@ -144,9 +153,18 @@ export const CommunityProvider: React.FC<CommunityProviderProps> = ({ children, 
 
   // Navigation handlers
   const backToPortal = useCallback((targetSectionId?: string) => {
+    // 1. Reset active community state - NEVER clear communities or userMemberships array
     setActiveCommunityId(null);
     setViewMode('portal');
 
+    // 2. Clear any hash loop without triggering page reload or unmount
+    if (window.location.hash) {
+      try {
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+      } catch {}
+    }
+
+    // 3. Smooth scroll cleanly to the top or target section
     if (targetSectionId) {
       setTimeout(() => {
         const el = document.getElementById(targetSectionId);
@@ -160,13 +178,9 @@ export const CommunityProvider: React.FC<CommunityProviderProps> = ({ children, 
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // Only fetch from Supabase if communities.length === 0.
-    // If communities already exist in memory, perform silent background stale-while-revalidate.
-    if (globalCommunitiesCache.length === 0) {
-      refreshCommunities(false);
-    } else {
-      refreshCommunities(true);
-    }
+    // 4. Stale-while-revalidate: communities remain immediately visible from cache
+    // Silently re-check in background without blanking out UI
+    refreshCommunities(true);
   }, [refreshCommunities]);
 
   const enterCommunity = useCallback((communityId: string) => {

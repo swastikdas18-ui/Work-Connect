@@ -123,6 +123,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
   // Search filter
   const [searchQuery, setSearchQuery] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
 
   // Filter posts belonging to active community AND search query AND category
   const filteredPosts = posts
@@ -178,7 +179,8 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
   };
 
   const handleSubmitComment = async (postId: string) => {
-    if (!newCommentText.trim()) return;
+    if (!newCommentText.trim() || isSubmittingComment) return;
+    setIsSubmittingComment(true);
     try {
       await onAddComment(postId, newCommentText);
       setNewCommentText('');
@@ -190,6 +192,11 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
       }
     } catch (err) {
       console.error(err);
+    } finally {
+      // 2-second client-side submission cooldown
+      setTimeout(() => {
+        setIsSubmittingComment(false);
+      }, 2000);
     }
   };
 
@@ -702,21 +709,27 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
               <div className="p-4 border-t border-zinc-100 bg-white dark:bg-zinc-950 dark:border-zinc-850">
                 <div className="flex gap-2">
                   <input 
-                    type="text"
+                    type="text" 
                     required
-                    placeholder="Write a supportive reply..."
+                    disabled={isSubmittingComment}
+                    placeholder={isSubmittingComment ? "Submitting reply..." : "Write a supportive reply..."}
                     value={newCommentText}
                     onChange={(e) => setNewCommentText(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleSubmitComment(activePostForComments.id);
                     }}
-                    className="flex-1 text-xs px-3 py-2 bg-zinc-50 border border-zinc-100 rounded-lg focus:outline-none dark:bg-zinc-900 dark:border-zinc-850 dark:text-zinc-200"
+                    className="flex-1 text-xs px-3 py-2 bg-zinc-50 border border-zinc-100 rounded-lg focus:outline-none dark:bg-zinc-900 dark:border-zinc-850 dark:text-zinc-200 disabled:opacity-60"
                   />
                   <button 
+                    disabled={isSubmittingComment || !newCommentText.trim()}
                     onClick={() => handleSubmitComment(activePostForComments.id)}
-                    className="bg-zinc-900 hover:bg-zinc-800 text-white p-2 rounded-lg dark:bg-zinc-100 dark:text-zinc-900"
+                    className="bg-zinc-900 hover:bg-zinc-800 text-white p-2 rounded-lg dark:bg-zinc-100 dark:text-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-all"
                   >
-                    <Send className="h-4.5 w-4.5" />
+                    {isSubmittingComment ? (
+                      <Loader2 className="h-4.5 w-4.5 animate-spin text-zinc-400 dark:text-zinc-600" />
+                    ) : (
+                      <Send className="h-4.5 w-4.5" />
+                    )}
                   </button>
                 </div>
               </div>

@@ -502,6 +502,19 @@ function AppContent({ auth }: { auth: AuthContextType }) {
 
       const { action, upvotes_count } = await dbService.togglePostUpvote(postId, user.id);
       
+      // Update UI count and upvoted state immediately using server returned upvotes_count
+      setPosts(prevPosts =>
+        prevPosts.map(p =>
+          p.id === postId
+            ? {
+                ...p,
+                upvotes: upvotes_count,
+                hasUpvoted: action === 'upvoted'
+              }
+            : p
+        )
+      );
+
       // Reward Karma Points to post author
       if (postItem.author.id) {
         const authorProfile = await dbService.getProfile(postItem.author.id);
@@ -525,7 +538,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
     } catch (err: any) {
       console.error(err);
       if (err?.message && err.message.includes('Rate limit exceeded')) {
-        showToast("You're doing that too fast. Please wait a moment before trying again.");
+        showToast("You are doing that a bit too fast. Please wait a few seconds.");
       } else {
         showToast('Failed to toggle upvote.');
       }
@@ -556,7 +569,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
     } catch (e: any) {
       console.error(e);
       if (e?.message && e.message.includes('Rate limit exceeded')) {
-        showToast("You're doing that too fast. Please wait a moment before trying again.");
+        showToast("You are doing that a bit too fast. Please wait a few seconds.");
       } else {
         showToast('Failed to submit comment.');
       }
@@ -612,7 +625,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
     } catch (e: any) {
       console.error(e);
       if (e?.message && e.message.includes('Rate limit exceeded')) {
-        showToast("You're doing that too fast. Please wait a moment before trying again.");
+        showToast("You are doing that a bit too fast. Please wait a few seconds.");
       } else {
         showToast('Failed to publish post.');
       }

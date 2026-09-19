@@ -24,9 +24,12 @@ import {
   Globe,
   Lock,
   UserCheck,
-  Loader2
+  Loader2,
+  X as CloseIcon,
+  AlertCircle
 } from 'lucide-react';
 import { Post, User, CalendarEvent, Community } from '../types';
+import { compressImage, fileToDataUrl, formatFileSize } from '../utils/imageCompressor';
 
 interface CommunityTabProps {
   activeCommunity: Community;
@@ -35,7 +38,7 @@ interface CommunityTabProps {
   selectedCategory: string;
   onSelectCategory: (category: string) => void;
   onUpvotePost: (postId: string) => void;
-  onAddPost: (postData: { title: string; content: string; codeSnippet?: string; category: string }, sendAsNewsletter: boolean) => Promise<void> | void;
+  onAddPost: (postData: { title: string; content: string; codeSnippet?: string; mediaUrl?: string; category: string }, sendAsNewsletter: boolean) => Promise<void> | void;
   onAddComment: (postId: string, content: string) => Promise<void> | void;
   onToggleBookmark: (postId: string) => void;
   currentUser: User;
@@ -66,6 +69,52 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
   const [codeSnippet, setCodeSnippet] = useState('');
   const [category, setCategory] = useState('All');
   const [sendAsNewsletter, setSendAsNewsletter] = useState(false);
+
+  // Zero-cost image compression state
+  const [selectedImage, setSelectedImage] = useState<{
+    file: File;
+    previewUrl: string;
+    originalSize: number;
+    compressedSize: number;
+    reductionPercentage: number;
+    dataUrl?: string;
+  } | null>(null);
+  const [isCompressingImage, setIsCompressingImage] = useState(false);
+  const [compressionError, setCompressionError] = useState<string | null>(null);
+
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset error
+    setCompressionError(null);
+    setIsCompressingImage(true);
+
+    try {
+      // Compress with 1400px maximum dimension and 0.8 WebP quality
+      const result = await compressImage(file, { maxDimension: 1400, quality: 0.8 });
+      const dataUrl = await fileToDataUrl(result.blob);
+      setSelectedImage({
+        ...result,
+        dataUrl
+      });
+    } catch (err) {
+      console.error('Image compression failed:', err);
+      setCompressionError('Image processing failed. Try another file.');
+    } finally {
+      setIsCompressingImage(false);
+      // Reset input value so re-selecting same file triggers change
+      e.target.value = '';
+    }
+  };
+
+  const handleRemoveSelectedImage = () => {
+    if (selectedImage?.previewUrl) {
+      URL.revokeObjectURL(selectedImage.previewUrl);
+    }
+    setSelectedImage(null);
+    setCompressionError(null);
+  };
   
   // Active comment drawer
   const [activePostForComments, setActivePostForComments] = useState<Post | null>(null);
@@ -98,7 +147,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
 
   const handleSubmitPost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !content.trim() || isSubmitting) return;
+    if (!title.trim() || !content.trim() || isSubmitting || isCompressingImage) return;
 
     setIsSubmitting(true);
     try {
@@ -106,6 +155,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
         title,
         content,
         codeSnippet: codeSnippet.trim() ? codeSnippet : undefined,
+        mediaUrl: selectedImage?.dataUrl || selectedImage?.previewUrl || undefined,
         category: category === 'All' ? 'Discussions' : category
       }, sendAsNewsletter);
 
@@ -113,6 +163,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
       setTitle('');
       setContent('');
       setCodeSnippet('');
+      setSelectedImage(null);
       setCategory('All');
       setSendAsNewsletter(false);
       setShowCreateBox(false);
@@ -235,6 +286,81 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
                     onChange={(e) => setCodeSnippet(e.target.value)}
                     className="w-full font-mono text-xs p-3 bg-zinc-950 text-emerald-400 focus:outline-none"
                   />
+                </div>
+
+                {/* Media Upload & Inline Compression Preview */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 bg-zinc-50 text-xs font-semibold text-zinc-700 hover:bg-zinc-100 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-850 transition-all">
+                      <ImageIcon className="h-3.5 w-3.5 text-indigo-500" />
+                      <span>{selectedImage ? 'Change Image' : 'Attach Image'}</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={handleImageFileChange}
+                        disabled={isCompressingImage || isSubmitting}
+                      />
+                    </label>
+                    <span className="text-[10px] text-zinc-400">
+                      Auto-compressed (WebP • max 1400px • zero storage cost)
+                    </span>
+                  </div>
+
+                  {/* Compression In-Progress Indicator */}
+                  {isCompressingImage && (
+                    <div className="p-3 rounded-xl border border-indigo-200 bg-indigo-50/50 dark:bg-indigo-950/20 dark:border-indigo-900/50 flex items-center gap-2.5 animate-pulse">
+                      <Loader2 className="h-4 w-4 animate-spin text-indigo-600 dark:text-indigo-400" />
+                      <div className="text-xs">
+                        <span className="font-bold text-indigo-900 dark:text-indigo-200">Optimizing image...</span>
+                        <span className="text-indigo-600 dark:text-indigo-400 ml-1.5 text-[11px]">Resizing on canvas & converting to WebP</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Compression Error Notice */}
+                  {compressionError && (
+                    <div className="p-2.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:border-rose-900 dark:text-rose-300 text-xs flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      <span>{compressionError}</span>
+                    </div>
+                  )}
+
+                  {/* Compressed Image Preview Card */}
+                  {selectedImage && !isCompressingImage && (
+                    <div className="relative rounded-xl border border-zinc-200 overflow-hidden bg-zinc-50 dark:bg-zinc-900 dark:border-zinc-800 p-2.5 flex items-center gap-3">
+                      <img 
+                        src={selectedImage.previewUrl} 
+                        alt="Upload preview" 
+                        className="w-16 h-16 rounded-lg object-cover border border-zinc-200 dark:border-zinc-700 shrink-0" 
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                            {selectedImage.file.name}
+                          </span>
+                          <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                            -{selectedImage.reductionPercentage}% smaller
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 flex items-center gap-2">
+                          <span className="line-through">{formatFileSize(selectedImage.originalSize)}</span>
+                          <span>→</span>
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatFileSize(selectedImage.compressedSize)}</span>
+                          <span>•</span>
+                          <span>WebP 0.8 Quality</span>
+                        </div>
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={handleRemoveSelectedImage} 
+                        className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-zinc-800 transition-colors"
+                        title="Remove image"
+                      >
+                        <CloseIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -377,6 +503,17 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
                     <div className="mt-3">
                       <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50 leading-snug">{post.title}</h3>
                       <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1.5 leading-relaxed whitespace-pre-wrap">{post.content}</p>
+
+                      {post.mediaUrl && (
+                        <div className="mt-3 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-950/5 dark:bg-zinc-900/50 max-h-96 flex items-center justify-center">
+                          <img 
+                            src={post.mediaUrl} 
+                            alt={post.title} 
+                            loading="lazy"
+                            className="w-full h-auto max-h-96 object-contain rounded-lg"
+                          />
+                        </div>
+                      )}
 
                       {post.codeSnippet && (
                         <div className="mt-3 rounded-lg overflow-hidden border border-zinc-850 bg-zinc-950 p-3">

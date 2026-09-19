@@ -45,6 +45,7 @@ export interface Post {
   category: string;
   title: string;
   body: string;
+  media_url?: string;
   upvotes_count: number;
   comments_count: number;
   created_at: string;
@@ -589,6 +590,20 @@ export const dbService = {
     );
   },
 
+  async updateLessonVideo(lessonId: string, videoUrl: string): Promise<void> {
+    return wrapDbCall(
+      () => supabase.from('lessons').update({ video_url: videoUrl }).eq('id', lessonId),
+      () => {
+        const lessons = getLocalData<Lesson[]>('lessons', []);
+        const target = lessons.find(l => l.id === lessonId);
+        if (target) {
+          target.video_url = videoUrl;
+          setLocalData('lessons', lessons);
+        }
+      }
+    );
+  },
+
   async listLessonCompletions(userId: string): Promise<LessonCompletion[]> {
     return wrapDbCall(
       () => supabase.from('lesson_completions').select('*').eq('user_id', userId),
@@ -768,6 +783,7 @@ export async function getHydratedPosts(communityId: string, currentUserId?: stri
       author,
       title: p.title,
       content: p.body,
+      mediaUrl: p.media_url,
       category: p.category,
       timestamp: new Date(p.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' }),
       upvotes: p.upvotes_count || 0,

@@ -568,7 +568,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
   };
 
   // Add Post Action
-  const handleAddPost = async (postData: { title: string; content: string; codeSnippet?: string; category: string }, sendAsNewsletter: boolean) => {
+  const handleAddPost = async (postData: { title: string; content: string; codeSnippet?: string; mediaUrl?: string; category: string }, sendAsNewsletter: boolean) => {
     if (!ensureUserAuthenticated('publish posts')) return;
     if (!user || !selectedCommunityId) return;
     try {
@@ -580,6 +580,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
         category: postData.category,
         title: postData.title,
         body: postData.content,
+        media_url: postData.mediaUrl,
         upvotes_count: 1,
         comments_count: 0,
         created_at: new Date().toISOString()
@@ -673,6 +674,21 @@ function AppContent({ auth }: { auth: AuthContextType }) {
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  // Classroom - Update lesson video embed
+  const handleUpdateLessonVideo = async (trackId: string, lessonId: string, videoUrl: string) => {
+    if (!selectedCommunityId || !isAdminOrOwner) return;
+    try {
+      await dbService.updateLessonVideo(lessonId, videoUrl);
+      showToast('Lesson video embed updated successfully!');
+      if (selectedCommunityId) {
+        await loadCommunitySubcollections(selectedCommunityId);
+      }
+    } catch (e) {
+      console.error(e);
+      showToast('Failed to update lesson video.');
     }
   };
 
@@ -1522,6 +1538,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
                   onToggleLessonCompleted={handleToggleLessonCompleted}
                   onAddLessonDiscussion={handleAddLessonDiscussion}
                   onAddCourse={handleAddCourse}
+                  onUpdateLessonVideo={handleUpdateLessonVideo}
                 />
               )}
 

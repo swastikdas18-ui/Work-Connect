@@ -10,8 +10,12 @@ import {
   Plus, 
   Tag, 
   Image as ImageIcon,
-  Check
+  Check,
+  Loader2,
+  Upload,
+  AlertCircle
 } from 'lucide-react';
+import { compressImage, fileToDataUrl, formatFileSize } from '../utils/imageCompressor';
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -61,6 +65,39 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const [activeSection, setActiveSection] = useState<'info' | 'avatar' | 'skills' | 'social'>('info');
   const [newSkillInput, setNewSkillInput] = useState('');
   const [customAvatarUrl, setCustomAvatarUrl] = useState('');
+  const [isCompressingAvatar, setIsCompressingAvatar] = useState(false);
+  const [avatarUploadError, setAvatarUploadError] = useState<string | null>(null);
+  const [avatarUploadStats, setAvatarUploadStats] = useState<{
+    originalSize: number;
+    compressedSize: number;
+    reductionPercentage: number;
+  } | null>(null);
+
+  const handleAvatarFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setAvatarUploadError(null);
+    setIsCompressingAvatar(true);
+
+    try {
+      // Compress with 500px max dimension suitable for profile avatars, WebP 0.8 quality
+      const result = await compressImage(file, { maxDimension: 500, quality: 0.8 });
+      const dataUrl = await fileToDataUrl(result.blob);
+      setUpAvatar(dataUrl);
+      setAvatarUploadStats({
+        originalSize: result.originalSize,
+        compressedSize: result.compressedSize,
+        reductionPercentage: result.reductionPercentage
+      });
+    } catch (err) {
+      console.error('Failed to compress avatar:', err);
+      setAvatarUploadError('Failed to process image. Please try another file.');
+    } finally {
+      setIsCompressingAvatar(false);
+      e.target.value = '';
+    }
+  };
 
   const handleAddSkill = (e: React.KeyboardEvent | React.MouseEvent) => {
     if ('key' in e && e.key !== 'Enter') return;
@@ -82,6 +119,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
     if (customAvatarUrl.trim()) {
       setUpAvatar(customAvatarUrl.trim());
       setCustomAvatarUrl('');
+      setAvatarUploadStats(null);
     }
   };
 
@@ -247,6 +285,60 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                         );
                       })}
                     </div>
+                  </div>
+
+                  {/* Direct File Upload with Auto WebP Compression */}
+                  <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                      Upload Profile Photo (Auto-Compressed)
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-xs font-semibold text-zinc-700 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-750 transition-all">
+                        {isCompressingAvatar ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
+                        ) : (
+                          <Upload className="h-4 w-4 text-indigo-500" />
+                        )}
+                        <span>{isCompressingAvatar ? 'Optimizing Image...' : 'Choose Local Photo'}</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={handleAvatarFileUpload}
+                          disabled={isCompressingAvatar}
+                        />
+                      </label>
+                      <span className="text-[10px] text-zinc-400">
+                        Processed on device • WebP • 500px • 0-cost
+                      </span>
+                    </div>
+
+                    {isCompressingAvatar && (
+                      <div className="p-2.5 rounded-xl border border-indigo-200 bg-indigo-50/60 dark:bg-indigo-950/20 dark:border-indigo-900/40 flex items-center gap-2">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-600 dark:text-indigo-400" />
+                        <span className="text-xs text-indigo-800 dark:text-indigo-300">
+                          Resizing & converting image locally...
+                        </span>
+                      </div>
+                    )}
+
+                    {avatarUploadError && (
+                      <div className="p-2.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:border-rose-900 dark:text-rose-300 text-xs flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        <span>{avatarUploadError}</span>
+                      </div>
+                    )}
+
+                    {avatarUploadStats && !isCompressingAvatar && (
+                      <div className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-950/20 dark:border-emerald-900/40 flex items-center justify-between text-xs">
+                        <span className="text-emerald-800 dark:text-emerald-300 font-semibold">
+                          Optimized: {formatFileSize(avatarUploadStats.originalSize)} → {formatFileSize(avatarUploadStats.compressedSize)}
+                        </span>
+                        <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-200/70 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
+                          -{avatarUploadStats.reductionPercentage}% smaller
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2">

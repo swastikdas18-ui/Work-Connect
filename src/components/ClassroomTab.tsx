@@ -15,9 +15,12 @@ import {
   ExternalLink,
   Award,
   Plus,
-  X
+  X,
+  Video,
+  AlertTriangle
 } from 'lucide-react';
 import { CourseTrack, Lesson, Comment, User as UserType } from '../types';
+import { parseVideoEmbed, isDirectVideoFile } from '../utils/videoEmbed';
 
 interface ClassroomTabProps {
   courses: CourseTrack[];
@@ -26,6 +29,7 @@ interface ClassroomTabProps {
   onToggleLessonCompleted: (trackId: string, lessonId: string) => void;
   onAddLessonDiscussion: (trackId: string, lessonId: string, commentText: string) => void;
   onAddCourse: (title: string, description: string, bannerColor: string) => void;
+  onUpdateLessonVideo?: (trackId: string, lessonId: string, videoUrl: string) => Promise<void> | void;
 }
 
 export const ClassroomTab: React.FC<ClassroomTabProps> = ({
@@ -34,7 +38,8 @@ export const ClassroomTab: React.FC<ClassroomTabProps> = ({
   isAdminOrOwner,
   onToggleLessonCompleted,
   onAddLessonDiscussion,
-  onAddCourse
+  onAddCourse,
+  onUpdateLessonVideo
 }) => {
   const [selectedTrackId, setSelectedTrackId] = useState<string>(courses[0]?.id || '');
   const [selectedLessonId, setSelectedLessonId] = useState<string>(courses[0]?.lessons[0]?.id || '');
@@ -45,6 +50,12 @@ export const ClassroomTab: React.FC<ClassroomTabProps> = ({
   const [courseTitle, setCourseTitle] = useState('');
   const [courseDesc, setCourseDesc] = useState('');
   const [courseColor, setCourseColor] = useState('from-blue-500 to-indigo-600');
+
+  // Video Embed Modal State
+  const [showVideoEmbedModal, setShowVideoEmbedModal] = useState(false);
+  const [videoInputUrl, setVideoInputUrl] = useState('');
+  const [videoInputError, setVideoInputError] = useState<string | null>(null);
+  const [isSavingVideo, setIsSavingVideo] = useState(false);
 
   // Sync state when community is switched and courses change
   React.useEffect(() => {
@@ -82,6 +93,52 @@ export const ClassroomTab: React.FC<ClassroomTabProps> = ({
     setCourseDesc('');
     setCourseColor('from-blue-500 to-indigo-600');
     setShowAddCourseModal(false);
+  };
+
+  const handleSaveVideoEmbed = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeTrack || !activeLesson) return;
+
+    const trimmedUrl = videoInputUrl.trim();
+    if (!trimmedUrl) {
+      setVideoInputError('Please enter a video URL.');
+      return;
+    }
+
+    // DISALLOW DIRECT VIDEO UPLOADS / RAW VIDEO FILES (.mp4, .mov, etc.) to maintain zero hosting cost
+    if (isDirectVideoFile(trimmedUrl)) {
+      setVideoInputError(
+        'Direct raw video files (.mp4, .mov, .webm) are not permitted to ensure zero storage and bandwidth costs. Please host your video on YouTube, Loom, or Vimeo and paste the URL here.'
+      );
+      return;
+    }
+
+    // Parse and validate YouTube, Loom, Vimeo
+    const parsed = parseVideoEmbed(trimmedUrl);
+    if (!parsed.isValid) {
+      setVideoInputError(
+        'Invalid video URL. Please provide a valid YouTube, Loom, or Vimeo URL.'
+      );
+      return;
+    }
+
+    setIsSavingVideo(true);
+    setVideoInputError(null);
+    try {
+      if (onUpdateLessonVideo) {
+        await onUpdateLessonVideo(activeTrack.id, activeLesson.id, parsed.embedUrl);
+      } else {
+        // Optimistic in-memory update
+        activeLesson.videoUrl = parsed.embedUrl;
+      }
+      setShowVideoEmbedModal(false);
+      setVideoInputUrl('');
+    } catch (err) {
+      console.error('Failed to update lesson video:', err);
+      setVideoInputError('Failed to save video embed. Please try again.');
+    } finally {
+      setIsSavingVideo(false);
+    }
   };
 
   const getCompletedCount = (track: CourseTrack) => {
@@ -254,31 +311,86 @@ export const ClassroomTab: React.FC<ClassroomTabProps> = ({
                 <>
                   {/* Active Lesson Display Card */}
                   <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden shadow-sm dark:bg-zinc-950 dark:border-zinc-800">
-                    {/* Simulated video player */}
-                    <div className="aspect-video bg-zinc-950 relative flex flex-col items-center justify-center p-6 text-center border-b border-zinc-800">
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.12)_0%,transparent_70%)] pointer-events-none" />
-                      
-                      <div className="z-10 max-w-md">
-                        <div className="h-14 w-14 rounded-full bg-white/10 backdrop-blur border border-white/20 mx-auto flex items-center justify-center shadow-lg hover:scale-105 transition-transform cursor-pointer">
-                          <Play className="h-6 w-6 text-white fill-white translate-x-0.5" />
-                        </div>
-                        <h5 className="text-sm font-bold text-white mt-4">{activeLesson.title}</h5>
-                        <p className="text-xs text-zinc-400 mt-1">Video presentation placeholder ({activeLesson.duration})</p>
-                      </div>
+                    {/* Video Player: YouTube / Loom / Vimeo Embed or Interactive Embed Box */}
+                    {(() => {
+                      const videoEmbed = activeLesson.videoUrl ? parseVideoEmbed(activeLesson.videoUrl) : null;
+                      if (videoEmbed && videoEmbed.isValid) {
+                        return (
+                          <div className="aspect-video bg-black relative overflow-hidden border-b border-zinc-800">
+                            <iframe 
+                              src={videoEmbed.embedUrl}
+                              title={videoEmbed.title || activeLesson.title}
+                              className="w-full h-full border-0"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                              allowFullScreen
+                            />
+                            <div className="absolute top-2 right-2 flex items-center gap-1.5 bg-black/70 backdrop-blur px-2 py-0.5 rounded-md text-[10px] font-semibold text-zinc-300">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                              <span className="capitalize">{videoEmbed.provider} Embed</span>
+                            </div>
+                          </div>
+                        );
+                      }
 
-                      <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between text-[10px] font-semibold text-zinc-500 font-mono">
-                        <span>STAGING_ENV_CAST</span>
-                        <span>1080P • COMPRESSED</span>
-                      </div>
-                    </div>
+                      return (
+                        <div className="aspect-video bg-zinc-950 relative flex flex-col items-center justify-center p-6 text-center border-b border-zinc-800">
+                          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.15)_0%,transparent_70%)] pointer-events-none" />
+                          
+                          <div className="z-10 max-w-md space-y-3">
+                            <div className="h-14 w-14 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 mx-auto flex items-center justify-center shadow-lg">
+                              <Video className="h-7 w-7 text-indigo-400" />
+                            </div>
+                            <h5 className="text-sm font-bold text-white">{activeLesson.title}</h5>
+                            <p className="text-xs text-zinc-400 max-w-xs mx-auto">
+                              Zero-cost video hosting: Attach a YouTube, Loom, or Vimeo recording to stream directly in the workspace.
+                            </p>
+                            {isAdminOrOwner && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowVideoEmbedModal(true);
+                                  setVideoInputUrl(activeLesson.videoUrl || '');
+                                  setVideoInputError(null);
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md transition-all"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                                <span>{activeLesson.videoUrl ? 'Update Video Embed' : 'Attach Video Embed'}</span>
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between text-[10px] font-semibold text-zinc-500 font-mono">
+                            <span>EXTERNAL_STREAM_HOST</span>
+                            <span>YOUTUBE • LOOM • VIMEO</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Lesson Info Header */}
                     <div className="p-6">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div>
-                          <span className="text-[10px] font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full dark:bg-zinc-900 dark:text-indigo-400">
-                            Lesson {activeTrack.lessons.indexOf(activeLesson) + 1}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full dark:bg-zinc-900 dark:text-indigo-400">
+                              Lesson {activeTrack.lessons.indexOf(activeLesson) + 1}
+                            </span>
+                            {isAdminOrOwner && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowVideoEmbedModal(true);
+                                  setVideoInputUrl(activeLesson.videoUrl || '');
+                                  setVideoInputError(null);
+                                }}
+                                className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                              >
+                                <Video className="h-3 w-3" />
+                                <span>{activeLesson.videoUrl ? 'Edit Embed' : 'Add Video URL'}</span>
+                              </button>
+                            )}
+                          </div>
                           <h2 className="text-lg font-bold text-zinc-900 mt-2 dark:text-zinc-50">{activeLesson.title}</h2>
                         </div>
 
@@ -469,6 +581,105 @@ export const ClassroomTab: React.FC<ClassroomTabProps> = ({
                     className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-2 rounded-xl shadow-md transition-all"
                   >
                     Publish Track
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* VIDEO EMBED CONFIGURATION MODAL */}
+      <AnimatePresence>
+        {showVideoEmbedModal && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.4 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowVideoEmbedModal(false)}
+              className="fixed inset-0 bg-black z-50"
+            />
+            
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: -20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: -20 }}
+              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[92%] max-w-lg bg-white dark:bg-zinc-900 rounded-3xl p-6 shadow-2xl border border-zinc-200 dark:border-zinc-800 z-50"
+            >
+              <div className="flex justify-between items-center pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400">
+                    <Video className="h-4.5 w-4.5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-zinc-900 dark:text-zinc-100">
+                      Configure Lesson Video Embed
+                    </h3>
+                    <p className="text-[11px] text-zinc-400">Zero-cost stream hosting via external providers</p>
+                  </div>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => setShowVideoEmbedModal(false)}
+                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                >
+                  <X className="h-4.5 w-4.5" />
+                </button>
+              </div>
+
+              {/* Zero-Cost Hosting Notice & Restriction Warning */}
+              <div className="mt-4 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                <div className="space-y-1 text-[11px] leading-relaxed">
+                  <span className="font-bold block text-amber-950 dark:text-amber-100">Direct raw video files (.mp4 / .mov) disallowed</span>
+                  <span>To ensure zero storage and bandwidth expenses, upload your recording to YouTube, Loom, or Vimeo and paste the link below.</span>
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveVideoEmbed} className="mt-4 space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                    Video Share URL (YouTube, Loom, Vimeo)
+                  </label>
+                  <input 
+                    type="url" 
+                    required
+                    placeholder="e.g. https://youtu.be/... or https://www.loom.com/share/..."
+                    value={videoInputUrl}
+                    onChange={(e) => {
+                      setVideoInputUrl(e.target.value);
+                      if (videoInputError) setVideoInputError(null);
+                    }}
+                    className="w-full text-xs font-semibold px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                  />
+                  <span className="text-[10px] text-zinc-400 block">
+                    Supports: YouTube (normal, Shorts), Loom recordings, and Vimeo videos.
+                  </span>
+                </div>
+
+                {videoInputError && (
+                  <div className="p-2.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:border-rose-900 dark:text-rose-300 text-xs flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>{videoInputError}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+                  <button 
+                    type="button"
+                    onClick={() => setShowVideoEmbedModal(false)}
+                    className="text-xs font-bold border border-zinc-200 text-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300"
+                  >
+                    Cancel
+                  </button>
+
+                  <button 
+                    type="submit"
+                    disabled={isSavingVideo || !videoInputUrl.trim()}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-2 rounded-xl shadow-md transition-all disabled:opacity-50"
+                  >
+                    {isSavingVideo ? 'Saving Embed...' : 'Save Video Embed'}
                   </button>
                 </div>
               </form>

@@ -333,7 +333,40 @@ export const dbService = {
 
   async createPost(post: Post): Promise<Post> {
     return wrapDbCall(
-      () => supabase.from('posts').insert(post).select().single(),
+      async () => {
+        const { data: newPost, error } = await supabase.rpc('create_post_with_rate_limit', {
+          p_community_id: post.community_id,
+          p_category: post.category,
+          p_title: post.title.trim(),
+          p_body: post.body.trim(),
+        });
+
+        if (error) {
+          // If RPC not found (e.g. migration pending or local test), fallback to direct table insert
+          if (
+            error.code === 'PGRST202' ||
+            error.message?.includes('function') ||
+            error.message?.includes('does not exist')
+          ) {
+            console.warn('RPC create_post_with_rate_limit not found, falling back to direct insert:', error);
+            return supabase.from('posts').insert(post).select().single();
+          }
+          throw error;
+        }
+
+        // If media_url was provided, update the created post
+        if (post.media_url && newPost?.id) {
+          const { data: updatedPost } = await supabase
+            .from('posts')
+            .update({ media_url: post.media_url })
+            .eq('id', newPost.id)
+            .select()
+            .single();
+          if (updatedPost) return { data: updatedPost, error: null };
+        }
+
+        return { data: newPost, error: null };
+      },
       () => {
         const posts = getLocalData<Post[]>('posts', []);
         posts.push(post);

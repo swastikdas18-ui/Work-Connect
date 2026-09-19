@@ -648,25 +648,80 @@ function AppContent({ auth }: { auth: AuthContextType }) {
     if (!ensureUserAuthenticated('publish posts')) return;
     if (!user || !selectedCommunityId) return;
     try {
-      const postId = generateId('p');
-      await dbService.createPost({
-        id: postId,
-        community_id: selectedCommunityId,
-        author_id: user.id,
-        category: postData.category,
-        title: postData.title,
-        body: postData.content,
-        media_url: postData.mediaUrl,
-        upvotes_count: 1,
-        comments_count: 0,
-        created_at: new Date().toISOString()
-      });
+      let createdPostRecord: any;
 
-      // Add snippet if applicable
-      if (postData.codeSnippet) {
-        // Handled in frontend UI schema
+      if (isSupabaseConfigured) {
+        const { data: newPost, error } = await supabase.rpc('create_post_with_rate_limit', {
+          p_community_id: selectedCommunityId,
+          p_category: postData.category,
+          p_title: postData.title.trim(),
+          p_body: postData.content.trim(),
+        });
+
+        if (error) {
+          if (error.message?.includes('RATE_LIMIT_EXCEEDED') || error.message?.toLowerCase().includes('rate limit')) {
+            showToast('You are doing that a bit too fast. Please wait a few seconds.');
+            return;
+          }
+          // Fallback to dbService.createPost if RPC missing
+          if (error.code === 'PGRST202' || error.message?.includes('function') || error.message?.includes('does not exist')) {
+            const fallbackPostId = generateId('p');
+            createdPostRecord = await dbService.createPost({
+              id: fallbackPostId,
+              community_id: selectedCommunityId,
+              author_id: user.id,
+              category: postData.category,
+              title: postData.title.trim(),
+              body: postData.content.trim(),
+              media_url: postData.mediaUrl,
+              upvotes_count: 0,
+              comments_count: 0,
+              created_at: new Date().toISOString()
+            });
+          } else {
+            showToast(error.message || 'Failed to publish post.');
+            return;
+          }
+        } else {
+          createdPostRecord = newPost;
+          if (postData.mediaUrl && newPost?.id) {
+            await supabase.from('posts').update({ media_url: postData.mediaUrl }).eq('id', newPost.id);
+            createdPostRecord.media_url = postData.mediaUrl;
+          }
+        }
+      } else {
+        const localPostId = generateId('p');
+        createdPostRecord = await dbService.createPost({
+          id: localPostId,
+          community_id: selectedCommunityId,
+          author_id: user.id,
+          category: postData.category,
+          title: postData.title.trim(),
+          body: postData.content.trim(),
+          media_url: postData.mediaUrl,
+          upvotes_count: 0,
+          comments_count: 0,
+          created_at: new Date().toISOString()
+        });
       }
 
+      // Prepend newly created post to active feed (initialized at 0 upvotes)
+      const formattedNewPost: Post = {
+        id: createdPostRecord?.id || generateId('p'),
+        communityId: selectedCommunityId,
+        author: mappedCurrentUser,
+        title: postData.title.trim(),
+        content: postData.content.trim(),
+        codeSnippet: postData.codeSnippet,
+        mediaUrl: postData.mediaUrl,
+        category: postData.category,
+        timestamp: 'Just now',
+        upvotes: 0,
+        hasUpvoted: false,
+        comments: []
+      };
+
+      setPosts((prev) => [formattedNewPost, ...prev]);
       showToast('Thread published on the cohort feed!');
 
       // If user wants to draft/broadcast this automatically to the newsletter studio
@@ -691,10 +746,10 @@ function AppContent({ auth }: { auth: AuthContextType }) {
       }
     } catch (e: any) {
       console.error(e);
-      if (e?.message && e.message.includes('Rate limit exceeded')) {
-        showToast("You are doing that a bit too fast. Please wait a few seconds.");
+      if (e?.message && (e.message.includes('RATE_LIMIT_EXCEEDED') || e.message.toLowerCase().includes('rate limit'))) {
+        showToast('You are doing that a bit too fast. Please wait a few seconds.');
       } else {
-        showToast('Failed to publish post.');
+        showToast(e?.message || 'Failed to publish post.');
       }
     }
   };
@@ -845,7 +900,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
         )
       );
 
-      showToast(rsvped ? 'RSVP confirmed! Added to your schedule.' : 'RSVP cancelled.');
+      showToast(rsvped ? 'RSVP confirmed! Added to your schedule.' : 'RSVP removed.');
     } catch (err: any) {
       console.error('RSVP toggle error:', err);
       showToast(err?.message || 'Unable to update RSVP. Please try again.');
@@ -1256,11 +1311,32 @@ function AppContent({ auth }: { auth: AuthContextType }) {
                             try {
                               await signOut();
                               setMemberships([]);
+
+                              // Reset in-memory community join flags
+                              setCommunities((prev) =>
+                                prev.map((c) => ({
+                                  ...c,
+                                  isJoined: false,
+                                  memberRole: undefined,
+                                }))
+                              );
+
+                              // Sanitize localStorage caches
                               try {
                                 localStorage.removeItem('wc_cached_memberships');
+                                localStorage.removeItem('wc_auth_session_profile');
+
+                                const sanitizedCommunities = (communities || []).map((c) => ({
+                                  ...c,
+                                  isJoined: false,
+                                  memberRole: undefined,
+                                }));
+                                localStorage.setItem('wc_cached_communities', JSON.stringify(sanitizedCommunities));
                               } catch {}
-                              backToPortal();
-                              showToast('Logged out successfully');
+
+                              setSelectedCommunityId(null);
+                              setViewMode('portal');
+                              showToast('Successfully logged out.');
                             } catch (err: any) {
                               showToast('Failed to log out: ' + (err?.message || 'Unknown error'));
                             }
@@ -1531,16 +1607,21 @@ function AppContent({ auth }: { auth: AuthContextType }) {
                           <div className="pt-3 border-t border-zinc-100 dark:border-zinc-900 mt-3 flex items-center justify-between">
                             <span className="text-[11px] text-zinc-400 font-semibold">{comm.memberCount} members</span>
                             
-                            <button
-                              onClick={(e) => handleJoinOrLeaveCommunity(comm.id, comm.name, e)}
-                              className={`text-[10px] font-extrabold px-3 py-1.5 rounded-lg transition-all ${
-                                comm.isJoined
-                                  ? 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-400'
-                                  : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                              }`}
-                            >
-                              {comm.isJoined ? 'Leave Space' : 'Join Space'}
-                            </button>
+                            {(() => {
+                              const isMember = Boolean(user && (comm.isJoined || memberships.some(m => m.community_id === comm.id)));
+                              return (
+                                <button
+                                  onClick={(e) => handleJoinOrLeaveCommunity(comm.id, comm.name, e)}
+                                  className={`text-[10px] font-extrabold px-3 py-1.5 rounded-lg transition-all ${
+                                    isMember
+                                      ? 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-400'
+                                      : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                  }`}
+                                >
+                                  {isMember ? 'Leave Space' : 'Join Space'}
+                                </button>
+                              );
+                            })()}
                           </div>
                         </div>
                       </div>

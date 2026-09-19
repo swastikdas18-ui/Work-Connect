@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, Suspense, lazy } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Users, 
@@ -27,14 +27,14 @@ import {
   TrendingUp,
   ExternalLink,
   MessageSquare,
-  Sparkle,
   UserCheck,
   Shield,
   Loader2,
   Check,
   ShieldAlert,
   Mail,
-  User as UserIcon
+  User as UserIcon,
+  Sparkle
 } from 'lucide-react';
 
 import { 
@@ -43,10 +43,77 @@ import {
 
 import { User, Post, CourseTrack, CalendarEvent, Broadcast, Comment, Community } from './types';
 import { CommunityTab } from './components/CommunityTab';
-import { ClassroomTab } from './components/ClassroomTab';
-import { CalendarTab } from './components/CalendarTab';
 import { LeaderboardTab } from './components/LeaderboardTab';
-import { NewsletterTab } from './components/NewsletterTab';
+
+// Lazy loaded tabs to reduce initial bundle size and speed up first paint
+const ClassroomTab = lazy(() => import('./components/ClassroomTab').then(m => ({ default: m.ClassroomTab })));
+const CalendarTab = lazy(() => import('./components/CalendarTab').then(m => ({ default: m.CalendarTab })));
+const NewsletterTab = lazy(() => import('./components/NewsletterTab').then(m => ({ default: m.NewsletterTab })));
+
+// Layout-stable minimal skeletons to eliminate Cumulative Layout Shift (CLS)
+function ClassroomSkeleton() {
+  return (
+    <div className="max-w-5xl mx-auto px-4 py-6 space-y-6 animate-pulse" aria-busy="true" aria-label="Loading classroom modules">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        <div className="col-span-1 lg:col-span-8 space-y-4">
+          <div className="w-full aspect-video rounded-2xl bg-zinc-200 dark:bg-zinc-800/80" />
+          <div className="h-6 w-3/4 bg-zinc-200 dark:bg-zinc-800 rounded-lg" />
+          <div className="h-4 w-1/2 bg-zinc-200 dark:bg-zinc-850 rounded-lg" />
+        </div>
+        <div className="col-span-1 lg:col-span-4 space-y-3">
+          <div className="h-5 w-1/3 bg-zinc-200 dark:bg-zinc-800 rounded-lg" />
+          <div className="h-20 w-full bg-zinc-100 dark:bg-zinc-900 rounded-xl border border-zinc-200/50 dark:border-zinc-800" />
+          <div className="h-20 w-full bg-zinc-100 dark:bg-zinc-900 rounded-xl border border-zinc-200/50 dark:border-zinc-800" />
+          <div className="h-20 w-full bg-zinc-100 dark:bg-zinc-900 rounded-xl border border-zinc-200/50 dark:border-zinc-800" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CalendarSkeleton() {
+  return (
+    <div className="max-w-5xl mx-auto px-4 py-6 space-y-6 animate-pulse" aria-busy="true" aria-label="Loading community events">
+      <div className="flex items-center justify-between">
+        <div className="h-6 w-40 bg-zinc-200 dark:bg-zinc-800 rounded-lg" />
+        <div className="h-9 w-28 bg-zinc-200 dark:bg-zinc-800 rounded-xl" />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-56 bg-white dark:bg-zinc-950 rounded-2xl border border-zinc-200/80 dark:border-zinc-850 p-5 space-y-4">
+            <div className="h-5 w-2/3 bg-zinc-200 dark:bg-zinc-800 rounded-lg" />
+            <div className="h-4 w-1/2 bg-zinc-100 dark:bg-zinc-850 rounded-lg" />
+            <div className="h-16 w-full bg-zinc-100 dark:bg-zinc-900 rounded-xl" />
+            <div className="h-9 w-full bg-zinc-200 dark:bg-zinc-800 rounded-xl" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function NewsletterSkeleton() {
+  return (
+    <div className="max-w-5xl mx-auto px-4 py-6 space-y-6 animate-pulse" aria-busy="true" aria-label="Loading newsletter studio">
+      <div className="flex items-center justify-between">
+        <div className="h-6 w-48 bg-zinc-200 dark:bg-zinc-800 rounded-lg" />
+        <div className="h-9 w-32 bg-zinc-200 dark:bg-zinc-800 rounded-xl" />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="col-span-1 lg:col-span-8 space-y-4">
+          <div className="h-48 bg-white dark:bg-zinc-950 rounded-2xl border border-zinc-200/80 dark:border-zinc-850 p-6 space-y-3">
+            <div className="h-5 w-1/2 bg-zinc-200 dark:bg-zinc-800 rounded-lg" />
+            <div className="h-4 w-full bg-zinc-100 dark:bg-zinc-850 rounded-lg" />
+            <div className="h-4 w-4/5 bg-zinc-100 dark:bg-zinc-850 rounded-lg" />
+          </div>
+        </div>
+        <div className="col-span-1 lg:col-span-4 space-y-4">
+          <div className="h-64 bg-zinc-100 dark:bg-zinc-900 rounded-2xl border border-zinc-200/50 dark:border-zinc-800" />
+        </div>
+      </div>
+    </div>
+  );
+}
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { AuthModal, AuthIntent } from './components/AuthModal';
 import { CreateCommunityModal } from './components/CreateCommunityModal';
@@ -1540,26 +1607,30 @@ function AppContent({ auth }: { auth: AuthContextType }) {
               )}
 
               {activeTab === 'classroom' && (
-                <ClassroomTab 
-                  courses={communityCourses}
-                  currentUser={mappedCurrentUser}
-                  isAdminOrOwner={isAdminOrOwner}
-                  onToggleLessonCompleted={handleToggleLessonCompleted}
-                  onAddLessonDiscussion={handleAddLessonDiscussion}
-                  onAddCourse={handleAddCourse}
-                  onUpdateLessonVideo={handleUpdateLessonVideo}
-                />
+                <Suspense fallback={<ClassroomSkeleton />}>
+                  <ClassroomTab 
+                    courses={communityCourses}
+                    currentUser={mappedCurrentUser}
+                    isAdminOrOwner={isAdminOrOwner}
+                    onToggleLessonCompleted={handleToggleLessonCompleted}
+                    onAddLessonDiscussion={handleAddLessonDiscussion}
+                    onAddCourse={handleAddCourse}
+                    onUpdateLessonVideo={handleUpdateLessonVideo}
+                  />
+                </Suspense>
               )}
 
               {activeTab === 'events' && (
-                <CalendarTab 
-                  events={communityEvents}
-                  isAdminOrOwner={isAdminOrOwner}
-                  onRSVP={handleToggleRsvp}
-                  rsvpLoadingId={rsvpLoadingId}
-                  onShowNotification={showToast}
-                  onAddEvent={handleAddEvent}
-                />
+                <Suspense fallback={<CalendarSkeleton />}>
+                  <CalendarTab 
+                    events={communityEvents}
+                    isAdminOrOwner={isAdminOrOwner}
+                    onRSVP={handleToggleRsvp}
+                    rsvpLoadingId={rsvpLoadingId}
+                    onShowNotification={showToast}
+                    onAddEvent={handleAddEvent}
+                  />
+                </Suspense>
               )}
 
               {activeTab === 'leaderboard' && (
@@ -1571,13 +1642,15 @@ function AppContent({ auth }: { auth: AuthContextType }) {
               )}
 
               {activeTab === 'newsletter' && (
-                <NewsletterTab 
-                  broadcasts={communityBroadcasts}
-                  trendingPosts={communityPosts.slice(0, 2)}
-                  isAdminOrOwner={isAdminOrOwner}
-                  onAddBroadcast={handleAddBroadcast}
-                  onShowNotification={showToast}
-                />
+                <Suspense fallback={<NewsletterSkeleton />}>
+                  <NewsletterTab 
+                    broadcasts={communityBroadcasts}
+                    trendingPosts={communityPosts.slice(0, 2)}
+                    isAdminOrOwner={isAdminOrOwner}
+                    onAddBroadcast={handleAddBroadcast}
+                    onShowNotification={showToast}
+                  />
+                </Suspense>
               )}
 
             </motion.div>

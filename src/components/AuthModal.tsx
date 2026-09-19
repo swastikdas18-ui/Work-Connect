@@ -56,7 +56,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (activeIntent.type === 'create_community') {
       return {
         title: 'Create Your Community',
-        subtitle: 'Sign in or create an account to start and manage your hub.',
+        subtitle: 'Sign in or create an account to launch and manage your space.',
       };
     }
     if (activeIntent.type === 'join_community') {

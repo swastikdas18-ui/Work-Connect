@@ -5,6 +5,15 @@ export function formatAuthError(error: any): string {
   if (!error) return 'An unexpected error occurred. Please try again.';
   const msg = (error.message || error.error_description || String(error)).toLowerCase();
 
+  if (msg.includes('authapierror') || msg.includes('400')) {
+    if (msg.includes('email') || msg.includes('format')) {
+      return 'Please enter a valid work or school email address.';
+    }
+    if (msg.includes('grant') || msg.includes('credential') || msg.includes('password')) {
+      return 'Incorrect email or password. Please verify your credentials.';
+    }
+    return 'Invalid authentication request. Please check your details and try again.';
+  }
   if (msg.includes('invalid') && msg.includes('email')) {
     return 'Please enter a valid work or school email address.';
   }

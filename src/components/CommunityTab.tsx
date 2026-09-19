@@ -38,7 +38,7 @@ interface CommunityTabProps {
   selectedCategory: string;
   onSelectCategory: (category: string) => void;
   onUpvotePost: (postId: string) => void;
-  onAddPost: (postData: { title: string; content: string; codeSnippet?: string; mediaUrl?: string; category: string }, sendAsNewsletter: boolean) => Promise<void> | void;
+  onAddPost: (postData: { title: string; content: string; codeSnippet?: string; mediaUrl?: string; mediaFile?: File; category: string }, sendAsNewsletter: boolean) => Promise<void> | void;
   onAddComment: (postId: string, content: string) => Promise<void> | void;
   onToggleBookmark: (postId: string) => void;
   currentUser: User;
@@ -157,6 +157,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
         content,
         codeSnippet: codeSnippet.trim() ? codeSnippet : undefined,
         mediaUrl: selectedImage?.dataUrl || selectedImage?.previewUrl || undefined,
+        mediaFile: selectedImage?.file || undefined,
         category: category === 'All' ? 'Discussions' : category
       }, sendAsNewsletter);
 
@@ -518,12 +519,16 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
                       <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1.5 leading-relaxed whitespace-pre-wrap">{post.content}</p>
 
                       {post.mediaUrl && (
-                        <div className="mt-3 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-950/5 dark:bg-zinc-900/50 max-h-96 flex items-center justify-center">
+                        <div className="mt-3 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-950/5 dark:bg-zinc-900/50 max-h-[480px] flex items-center justify-center">
                           <img 
                             src={post.mediaUrl} 
                             alt={post.title} 
                             loading="lazy"
-                            className="w-full h-auto max-h-96 object-contain rounded-lg"
+                            className="w-full h-auto max-h-[480px] object-contain rounded-lg"
+                            onError={(e) => {
+                              // Hide broken image icons silently (e.g. expired base64 or 400 storage URLs)
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
                           />
                         </div>
                       )}

@@ -37,9 +37,8 @@ import {
   Sparkle
 } from 'lucide-react';
 
-import { 
-  mockCategories
-} from './data/mockData';
+import { mockCategories } from './data/mockData';
+import { compressImage } from './utils/imageCompressor';
 
 import { User, Post, CourseTrack, CalendarEvent, Broadcast, Comment, Community } from './types';
 import { CommunityTab } from './components/CommunityTab';
@@ -644,11 +643,38 @@ function AppContent({ auth }: { auth: AuthContextType }) {
   };
 
   // Add Post Action
-  const handleAddPost = async (postData: { title: string; content: string; codeSnippet?: string; mediaUrl?: string; category: string }, sendAsNewsletter: boolean) => {
+  const handleAddPost = async (postData: { title: string; content: string; codeSnippet?: string; mediaUrl?: string; mediaFile?: File; category: string }, sendAsNewsletter: boolean) => {
     if (!ensureUserAuthenticated('publish posts')) return;
     if (!user || !selectedCommunityId) return;
     try {
       let createdPostRecord: any;
+
+      // ── Step 1: Upload image to Supabase Storage and resolve a stable publicUrl ──
+      let resolvedMediaUrl: string | undefined = undefined;
+      if (postData.mediaFile && isSupabaseConfigured) {
+        try {
+          const { blob: compressedBlob } = await compressImage(postData.mediaFile, { maxDimension: 1400, quality: 0.8 });
+          const safeName = postData.mediaFile.name.replace(/[^a-zA-Z0-9.-]/g, '');
+          const fileName = `${selectedCommunityId}/${Date.now()}-${safeName}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('post-attachments')
+            .upload(fileName, compressedBlob, {
+              contentType: 'image/webp',
+              cacheControl: '3600',
+              upsert: false,
+            });
+
+          if (uploadError) {
+            console.warn('Image upload failed, skipping attachment:', uploadError.message);
+          } else {
+            const { data: urlData } = supabase.storage.from('post-attachments').getPublicUrl(fileName);
+            resolvedMediaUrl = urlData?.publicUrl;
+          }
+        } catch (uploadErr) {
+          console.warn('Image compression/upload error, skipping attachment:', uploadErr);
+        }
+      }
 
       if (isSupabaseConfigured) {
         const { data: newPost, error } = await supabase.rpc('create_post_with_rate_limit', {
@@ -673,7 +699,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
               category: postData.category,
               title: postData.title.trim(),
               body: postData.content.trim(),
-              media_url: postData.mediaUrl,
+              media_url: resolvedMediaUrl,
               upvotes_count: 0,
               comments_count: 0,
               created_at: new Date().toISOString()
@@ -684,9 +710,9 @@ function AppContent({ auth }: { auth: AuthContextType }) {
           }
         } else {
           createdPostRecord = newPost;
-          if (postData.mediaUrl && newPost?.id) {
-            await supabase.from('posts').update({ media_url: postData.mediaUrl }).eq('id', newPost.id);
-            createdPostRecord.media_url = postData.mediaUrl;
+          if (resolvedMediaUrl && newPost?.id) {
+            await supabase.from('posts').update({ media_url: resolvedMediaUrl }).eq('id', newPost.id);
+            createdPostRecord.media_url = resolvedMediaUrl;
           }
         }
       } else {
@@ -698,7 +724,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
           category: postData.category,
           title: postData.title.trim(),
           body: postData.content.trim(),
-          media_url: postData.mediaUrl,
+          media_url: resolvedMediaUrl,
           upvotes_count: 0,
           comments_count: 0,
           created_at: new Date().toISOString()
@@ -713,7 +739,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
         title: postData.title.trim(),
         content: postData.content.trim(),
         codeSnippet: postData.codeSnippet,
-        mediaUrl: postData.mediaUrl,
+        mediaUrl: resolvedMediaUrl,  // Use storage publicUrl, not base64
         category: postData.category,
         timestamp: 'Just now',
         upvotes: 0,

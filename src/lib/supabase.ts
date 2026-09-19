@@ -145,65 +145,19 @@ const setLocalData = <T>(key: string, val: T): void => {
   } catch {}
 };
 
-// State to track if Supabase schema is missing/uninitialized
-export let isSupabaseSchemaMissing = false;
-let onSchemaMissingCallback: (() => void) | null = null;
-
-export function onSupabaseSchemaMissing(callback: () => void) {
-  onSchemaMissingCallback = callback;
-}
-
-export function triggerSchemaMissing() {
-  if (!isSupabaseSchemaMissing) {
-    isSupabaseSchemaMissing = true;
-    console.warn("Detected missing Supabase schema tables. Switching to high-fidelity Local Storage sandbox...");
-    if (onSchemaMissingCallback) {
-      onSchemaMissingCallback();
-    }
-  }
-}
-
-// Universal call wrapper to intercept PostgREST 205 (Could not find table) or relation does not exist errors
+// Universal call wrapper: real Supabase when configured, local storage only as dev fallback
 async function wrapDbCall<T>(
   supabaseCall: () => PromiseLike<{ data: any; error: any }> | any, 
   localFallback: () => T | Promise<T>
 ): Promise<T> {
-  if (isSupabaseConfigured && !isSupabaseSchemaMissing) {
-    try {
-      const { data, error } = await supabaseCall();
-      if (error) {
-        if (error.message?.includes("Rate limit exceeded")) {
-          throw error;
-        }
-        if (
-          error.code === 'PGRST205' || 
-          error.message?.includes("Could not find") || 
-          error.message?.includes("schema cache") || 
-          (error.message?.includes("relation") && error.message?.includes("does not exist"))
-        ) {
-          triggerSchemaMissing();
-          return await localFallback();
-        }
-        throw error;
-      }
-      return data;
-    } catch (err: any) {
-      if (err?.message?.includes("Rate limit exceeded")) {
-        throw err;
-      }
-      if (
-        err?.code === 'PGRST205' || 
-        err?.message?.includes("Could not find") || 
-        err?.message?.includes("schema cache") || 
-        (err?.message?.includes("relation") && err?.message?.includes("does not exist"))
-      ) {
-        triggerSchemaMissing();
-        return await localFallback();
-      }
-      console.error("Database query failed, falling back to Local Storage Sandbox:", err);
-      return await localFallback();
+  if (isSupabaseConfigured) {
+    const { data, error } = await supabaseCall();
+    if (error) {
+      throw error;
     }
+    return data;
   }
+  // Only use local storage when Supabase credentials are not configured at all (local dev)
   return await localFallback();
 }
 
@@ -498,7 +452,7 @@ export const dbService = {
         const { data, error } = await supabase.rpc('toggle_event_rsvp', {
           target_event_id: eventId,
         });
-        if (error) return { data: null, error };
+        if (error) throw error;
         return {
           data: {
             rsvped: Boolean(data?.rsvped),

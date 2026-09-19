@@ -830,26 +830,40 @@ function AppContent({ auth }: { auth: AuthContextType }) {
   // Calendar - Schedule Event Action
   const handleAddEvent = async (title: string, description: string, startsAtIso: string, meetUrl: string) => {
     if (!selectedCommunityId || !user) return;
-    try {
-      const eId = generateId('evt');
-      await dbService.createEvent({
-        id: eId,
-        community_id: selectedCommunityId,
-        title,
-        description,
-        host_name: user.full_name,
-        host_avatar: user.avatar_url,
-        starts_at: startsAtIso,
-        meet_url: meetUrl,
-        attendees_count: 1
-      });
 
-      showToast('New cohort mixer has been scheduled!');
+    if (!isSupabaseConfigured) {
+      showToast('Supabase is not configured. Cannot schedule events.');
+      return;
+    }
+
+    try {
+      const { data: newEvent, error } = await supabase
+        .from('events')
+        .insert({
+          community_id: selectedCommunityId,
+          title: title.trim(),
+          description: description.trim() || null,
+          host_name: user.full_name || 'Community Member',
+          starts_at: new Date(startsAtIso).toISOString(),
+          meet_url: meetUrl?.trim() || null,
+          attendees_count: 0,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        showToast(error.message || 'Failed to create event.');
+        return;
+      }
+
+      showToast('Event scheduled successfully!');
+      // Reload events to get the authoritative list from DB
       if (selectedCommunityId) {
         await loadCommunitySubcollections(selectedCommunityId);
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.error('Event creation error:', e);
+      showToast(e?.message || 'Failed to schedule event.');
     }
   };
 
@@ -864,24 +878,28 @@ function AppContent({ auth }: { auth: AuthContextType }) {
       return;
     }
 
+    if (!isSupabaseConfigured) {
+      showToast('Supabase is not configured. Cannot update RSVP.');
+      return;
+    }
+
     setRsvpLoadingId(eventId);
     try {
-      let rsvped: boolean;
-      let attendees_count: number;
+      const { data, error } = await supabase.rpc('toggle_event_rsvp', {
+        target_event_id: eventId,
+      });
 
-      if (isSupabaseConfigured) {
-        const { data, error } = await supabase.rpc('toggle_event_rsvp', {
-          target_event_id: eventId,
-        });
-
-        if (error) throw error;
-        rsvped = data.rsvped;
-        attendees_count = data.attendees_count;
-      } else {
-        const res = await dbService.toggleRSVP(eventId, user.id);
-        rsvped = res.rsvped;
-        attendees_count = res.attendees_count;
+      if (error) {
+        if (error.message?.includes('EVENT_NOT_FOUND')) {
+          showToast('This event is no longer available.');
+        } else {
+          showToast(error.message || 'Failed to update RSVP.');
+        }
+        return;
       }
+
+      const rsvped = data.rsvped;
+      const attendees_count = data.attendees_count;
 
       // Update state using the authoritative count and status from Postgres
       setEvents((prevEvents) =>
@@ -898,10 +916,10 @@ function AppContent({ auth }: { auth: AuthContextType }) {
         )
       );
 
-      showToast(rsvped ? 'RSVP confirmed! Added to your schedule.' : 'RSVP removed.');
+      showToast(rsvped ? 'RSVP confirmed! Added to your schedule.' : 'RSVP cancelled.');
     } catch (err: any) {
       console.error('RSVP toggle error:', err);
-      showToast(err?.message || 'Unable to update RSVP. Please try again.');
+      showToast(err?.message || 'Error updating RSVP.');
     } finally {
       setRsvpLoadingId(null);
     }

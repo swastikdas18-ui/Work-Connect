@@ -1388,7 +1388,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
                     </div>
                   )
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <div data-testid="your-communities-grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {yourCommunities.map((comm) => (
                       <div
                         key={comm.id}
@@ -1491,7 +1491,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
                     </div>
                   )
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div data-testid="explore-communities-grid" className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     {exploreCommunities.map((comm) => (
                       <div
                         key={comm.id}

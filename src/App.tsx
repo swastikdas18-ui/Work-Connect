@@ -36,7 +36,8 @@ import {
   User as UserIcon,
   Sparkle,
   Share2,
-  Download
+  Download,
+  Smartphone
 } from 'lucide-react';
 
 import { mockCategories } from './data/mockData';
@@ -60,13 +61,10 @@ function ClassroomSkeleton() {
         <div className="col-span-1 lg:col-span-8 space-y-4">
           <div className="w-full aspect-video rounded-2xl bg-zinc-200 dark:bg-zinc-800/80" />
           <div className="h-6 w-3/4 bg-zinc-200 dark:bg-zinc-800 rounded-lg" />
-          <div className="h-4 w-1/2 bg-zinc-200 dark:bg-zinc-850 rounded-lg" />
+          <div className="h-4 w-1/2 bg-zinc-200/70 dark:bg-zinc-800/70 rounded" />
         </div>
-        <div className="col-span-1 lg:col-span-4 space-y-3">
-          <div className="h-5 w-1/3 bg-zinc-200 dark:bg-zinc-800 rounded-lg" />
-          <div className="h-20 w-full bg-zinc-100 dark:bg-zinc-900 rounded-xl border border-zinc-200/50 dark:border-zinc-800" />
-          <div className="h-20 w-full bg-zinc-100 dark:bg-zinc-900 rounded-xl border border-zinc-200/50 dark:border-zinc-800" />
-          <div className="h-20 w-full bg-zinc-100 dark:bg-zinc-900 rounded-xl border border-zinc-200/50 dark:border-zinc-800" />
+        <div className="col-span-1 lg:col-span-4 space-y-4">
+          <div className="h-64 bg-zinc-100 dark:bg-zinc-900 rounded-2xl border border-zinc-200/50 dark:border-zinc-800" />
         </div>
       </div>
     </div>
@@ -135,8 +133,18 @@ import {
   mapCommunityToUI,
   isSupabaseConfigured,
   Profile,
-  Membership
+  Membership,
+  isValidUUID
 } from './lib/supabase';
+
+// Store at window/module level to ensure no event loss across re-renders
+let globalDeferredPrompt: any = null;
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    globalDeferredPrompt = e;
+  });
+}
 
 function AppContent({ auth }: { auth: AuthContextType }) {
   const { user, session, loading: authLoading, signIn, signUp, signOut, setRole, updateProfile } = auth;
@@ -444,34 +452,30 @@ function AppContent({ auth }: { auth: AuthContextType }) {
   }, []);
 
   // PWA Install Flow
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallModal, setShowInstallModal] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
-  const [showInstallHelp, setShowInstallHelp] = useState(false);
 
   useEffect(() => {
-    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
-      setIsStandalone(true);
-    }
-
-    const handler = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
+    const isAppInstalled = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+    setIsStandalone(Boolean(isAppInstalled));
   }, []);
 
   const handleInstallClick = async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        setDeferredPrompt(null);
-        showToast('Work Connect installed!');
+    if (globalDeferredPrompt) {
+      try {
+        globalDeferredPrompt.prompt();
+        const choice = await globalDeferredPrompt.userChoice;
+        if (choice.outcome === 'accepted') {
+          globalDeferredPrompt = null;
+          showToast('Work Connect installed successfully!');
+        }
+      } catch (err) {
+        console.error('Install prompt error:', err);
+        setShowInstallModal(true);
       }
     } else {
-      // Open fallback help modal explaining browser-specific install steps
-      setShowInstallHelp(true);
+      // If browser has already handled or does not support automatic prompts, show actionable modal
+      setShowInstallModal(true);
     }
   };
 
@@ -548,7 +552,11 @@ function AppContent({ auth }: { auth: AuthContextType }) {
       addCommunityOptimistic(mapCommunityToUI(commData, true), newM);
 
       await dbService.createCommunity(commData);
-      await dbService.createMembership(newM);
+      if (!isValidUUID(user?.id) || !isValidUUID(commId)) {
+        console.warn('Skipping membership sync: invalid user or community UUID', { userId: user?.id, communityId: commId });
+      } else {
+        await dbService.createMembership(newM);
+      }
 
       showToast(`Community "${newCommName}" launched successfully!`);
       setShowCreateModal(false);
@@ -1098,7 +1106,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
     );
   }
 
-  const isAnyModalOpen = showCreateModal || showProfileModal || showSearchModal || showAuthModal || showInstallHelp || !!inspectingUser;
+  const isAnyModalOpen = showCreateModal || showProfileModal || showSearchModal || showAuthModal || showInstallModal || !!inspectingUser;
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 flex flex-col font-sans select-none antialiased">
@@ -1998,13 +2006,13 @@ function AppContent({ auth }: { auth: AuthContextType }) {
 
       {/* PWA Install Instructions Fallback Modal */}
       <AnimatePresence>
-        {showInstallHelp && (
+        {showInstallModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setShowInstallHelp(false)}
+              onClick={() => setShowInstallModal(false)}
               className="absolute inset-0 bg-black/60 backdrop-blur-xs"
             />
             
@@ -2025,7 +2033,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
                   </div>
                 </div>
                 <button 
-                  onClick={() => setShowInstallHelp(false)}
+                  onClick={() => setShowInstallModal(false)}
                   className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
                   aria-label="Close"
                 >
@@ -2033,33 +2041,46 @@ function AppContent({ auth }: { auth: AuthContextType }) {
                 </button>
               </div>
 
-              <div className="mt-4 space-y-4">
+              <div className="mt-4 space-y-3">
                 <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
                   To install Work Connect directly to your home screen or desktop:
                 </p>
 
-                {/* Chrome / Edge Instructions */}
+                {/* Chrome / Edge / Brave (Desktop) */}
                 <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/70 dark:border-zinc-800 flex items-start gap-3">
                   <div className="h-7 w-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
                     <Laptop className="h-4 w-4" />
                   </div>
                   <div className="text-xs">
-                    <span className="font-semibold text-zinc-900 dark:text-white block">Chrome, Edge & Brave</span>
+                    <span className="font-semibold text-zinc-900 dark:text-white block">Chrome / Edge / Brave (Desktop)</span>
                     <span className="text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                      Click the <strong className="text-zinc-800 dark:text-zinc-200">Install</strong> icon in the address bar, or click <strong className="text-zinc-800 dark:text-zinc-200">⋯ (Menu) &gt; Install Work Connect</strong>.
+                      Click the install icon in the URL bar (top right) or open menu (⋮) → &apos;Install Work Connect&apos;.
                     </span>
                   </div>
                 </div>
 
-                {/* Safari / iOS Instructions */}
+                {/* Safari / iOS */}
                 <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/70 dark:border-zinc-800 flex items-start gap-3">
                   <div className="h-7 w-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
                     <Share2 className="h-4 w-4" />
                   </div>
                   <div className="text-xs">
-                    <span className="font-semibold text-zinc-900 dark:text-white block">Safari (iOS & macOS)</span>
+                    <span className="font-semibold text-zinc-900 dark:text-white block">Safari / iOS</span>
                     <span className="text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                      Tap the <strong className="text-zinc-800 dark:text-zinc-200">Share</strong> button, scroll down, and tap <strong className="text-zinc-800 dark:text-zinc-200">Add to Home Screen</strong>.
+                      Tap the Share button in Safari, then select &apos;Add to Home Screen&apos;.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Chrome / Android */}
+                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/70 dark:border-zinc-800 flex items-start gap-3">
+                  <div className="h-7 w-7 rounded-lg bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+                    <Smartphone className="h-4 w-4" />
+                  </div>
+                  <div className="text-xs">
+                    <span className="font-semibold text-zinc-900 dark:text-white block">Chrome / Android</span>
+                    <span className="text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                      Tap menu (⋮) → &apos;Add to Home Screen&apos; or &apos;Install App&apos;.
                     </span>
                   </div>
                 </div>
@@ -2067,10 +2088,10 @@ function AppContent({ auth }: { auth: AuthContextType }) {
 
               <div className="mt-6 flex justify-end">
                 <button
-                  onClick={() => setShowInstallHelp(false)}
+                  onClick={() => setShowInstallModal(false)}
                   className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors cursor-pointer shadow-sm shadow-indigo-600/20"
                 >
-                  Got It
+                  Got it
                 </button>
               </div>
             </motion.div>

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Community } from '../types';
-import { Membership, Profile, dbService, mapCommunityToUI } from '../lib/supabase';
+import { Membership, Profile, dbService, mapCommunityToUI, isValidUUID } from '../lib/supabase';
 
 export interface CommunityContextType {
   communities: Community[];
@@ -258,7 +258,11 @@ export const CommunityProvider: React.FC<CommunityProviderProps> = ({ children, 
         localStorage.setItem(LOCAL_STORAGE_MEMBERSHIPS_KEY, JSON.stringify(updatedMems));
       } catch {}
 
-      await dbService.createMembership(newM);
+      if (!isValidUUID(userId) || !isValidUUID(communityId)) {
+        console.warn('Skipping membership sync: invalid user or community UUID', { userId, communityId });
+      } else {
+        await dbService.createMembership(newM);
+      }
     } else {
       const updatedMems = globalMembershipsCache.filter((m) => m.community_id !== communityId);
       globalMembershipsCache = updatedMems;
@@ -267,7 +271,11 @@ export const CommunityProvider: React.FC<CommunityProviderProps> = ({ children, 
         localStorage.setItem(LOCAL_STORAGE_MEMBERSHIPS_KEY, JSON.stringify(updatedMems));
       } catch {}
 
-      await dbService.deleteMembership(userId, communityId);
+      if (!isValidUUID(userId) || !isValidUUID(communityId)) {
+        console.warn('Skipping membership sync: invalid user or community UUID', { userId, communityId });
+      } else {
+        await dbService.deleteMembership(userId, communityId);
+      }
     }
 
     refreshCommunities(true);

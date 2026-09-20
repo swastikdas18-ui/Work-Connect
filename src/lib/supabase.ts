@@ -130,6 +130,11 @@ export const supabase = createClient(
   supabaseAnonKey || 'placeholder-anon-key'
 );
 
+// Validate standard UUID format to prevent Postgres 22P02 invalid input syntax errors
+export const isValidUUID = (id: any): boolean =>
+  typeof id === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id.trim());
+
 // Fallback empty local-storage mock DB so the app functions instantly if no credentials are added yet
 const getLocalData = <T>(key: string, defaultVal: T): T => {
   try {
@@ -226,6 +231,11 @@ export const dbService = {
 
   // Memberships
   async getMemberships(userId: string): Promise<Membership[]> {
+    if (!isValidUUID(userId)) {
+      console.warn('Skipping membership sync: invalid user UUID', { userId });
+      const memberships = getLocalData<Membership[]>('memberships', []);
+      return memberships.filter(m => m.user_id === userId);
+    }
     return wrapDbCall(
       () => supabase.from('memberships').select('*').eq('user_id', userId),
       () => {
@@ -236,8 +246,38 @@ export const dbService = {
   },
 
   async createMembership(membership: Membership): Promise<Membership> {
+    const userId = membership.user_id;
+    const communityId = membership.community_id;
+
+    if (!isValidUUID(userId) || !isValidUUID(communityId)) {
+      console.warn('Skipping membership sync: invalid user or community UUID', { userId, communityId });
+      // Record locally in mock store so UI remains consistent without firing 22P02 to Supabase
+      const memberships = getLocalData<Membership[]>('memberships', []);
+      memberships.push(membership);
+      setLocalData('memberships', memberships);
+
+      const communities = getLocalData<Community[]>('communities', []);
+      const commIdx = communities.findIndex(c => c.id === membership.community_id);
+      if (commIdx >= 0) {
+        communities[commIdx].member_count += 1;
+        setLocalData('communities', communities);
+      }
+      return membership;
+    }
+
+    // Build payload ensuring valid UUID fields (drop mock ID if not valid UUID so Postgres generates gen_random_uuid())
+    const insertPayload: any = {
+      user_id: userId,
+      community_id: communityId,
+      role: membership.role || 'member',
+      joined_at: membership.joined_at || new Date().toISOString()
+    };
+    if (isValidUUID(membership.id)) {
+      insertPayload.id = membership.id;
+    }
+
     return wrapDbCall(
-      () => supabase.from('memberships').insert(membership).select().single(),
+      () => supabase.from('memberships').insert(insertPayload).select().single(),
       () => {
         const memberships = getLocalData<Membership[]>('memberships', []);
         memberships.push(membership);
@@ -256,6 +296,21 @@ export const dbService = {
   },
 
   async deleteMembership(userId: string, communityId: string): Promise<void> {
+    if (!isValidUUID(userId) || !isValidUUID(communityId)) {
+      console.warn('Skipping membership deletion sync: invalid user or community UUID', { userId, communityId });
+      const memberships = getLocalData<Membership[]>('memberships', []);
+      const filtered = memberships.filter(m => !(m.user_id === userId && m.community_id === communityId));
+      setLocalData('memberships', filtered);
+
+      const communities = getLocalData<Community[]>('communities', []);
+      const commIdx = communities.findIndex(c => c.id === communityId);
+      if (commIdx >= 0) {
+        communities[commIdx].member_count = Math.max(0, communities[commIdx].member_count - 1);
+        setLocalData('communities', communities);
+      }
+      return;
+    }
+
     return wrapDbCall(
       () => supabase.from('memberships').delete().eq('user_id', userId).eq('community_id', communityId),
       () => {

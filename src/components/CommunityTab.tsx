@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   MessageSquare, 
@@ -46,6 +46,7 @@ interface CommunityTabProps {
   onOpenNewsletterComposeWithContent?: (subject: string, content: string) => void;
   onSelectUser?: (user: User) => void;
   showToast?: (message: string) => void;
+  isLoadingPosts?: boolean;
 }
 
 export const CommunityTab: React.FC<CommunityTabProps> = ({
@@ -62,7 +63,8 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
   leaderboardUsers,
   onOpenNewsletterComposeWithContent,
   onSelectUser,
-  showToast
+  showToast,
+  isLoadingPosts = false
 }) => {
   const [sortBy, setSortBy] = useState<'activity' | 'newest' | 'top'>('activity');
   const [showCreateBox, setShowCreateBox] = useState(false);
@@ -132,6 +134,25 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
 
+  const CATEGORIES = categories && categories.length > 0
+    ? categories
+    : ['All', 'Announcements', 'Discussions', 'Wins & Demos', 'Help Wanted'];
+
+  // Posts belonging to this community
+  const communityPosts = useMemo(() => {
+    return posts.filter((p) => p.communityId === activeCommunity.id);
+  }, [posts, activeCommunity.id]);
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { All: communityPosts.length };
+    CATEGORIES.slice(1).forEach((cat) => {
+      counts[cat] = communityPosts.filter(
+        (p) => p.category?.toLowerCase() === cat.toLowerCase()
+      ).length;
+    });
+    return counts;
+  }, [communityPosts, CATEGORIES]);
+
   // Filter posts belonging to active community AND search query AND category
   const filteredPosts = posts
     .filter(post => {
@@ -170,23 +191,32 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
     setIsSubmitting(true);
 
     try {
+      const targetCategory = category === 'All' ? 'Discussions' : category;
       await onAddPost({
-        title,
-        content,
+        title: title.trim(),
+        content: content.trim(),
         codeSnippet: codeSnippet.trim() ? codeSnippet : undefined,
         mediaUrl: selectedImage?.dataUrl || selectedImage?.previewUrl || undefined,
         mediaFile: selectedImage?.file || undefined,
-        category: category === 'All' ? 'Discussions' : category
+        category: targetCategory
       }, sendAsNewsletter);
 
       // Reset Form State & close composer on success
       setTitle('');
       setContent('');
       setCodeSnippet('');
+      if (selectedImage?.previewUrl) {
+        URL.revokeObjectURL(selectedImage.previewUrl);
+      }
       setSelectedImage(null);
       setCategory('All');
       setSendAsNewsletter(false);
       setShowCreateBox(false);
+
+      // Auto-switch to the category of the new post or "All" so it's visible immediately
+      if (selectedCategory !== 'All' && selectedCategory.toLowerCase() !== targetCategory.toLowerCase()) {
+        onSelectCategory('All');
+      }
     } catch (err: any) {
       console.error(err);
       const msg = (err?.message || '').toLowerCase();
@@ -234,17 +264,24 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
           {/* Streamlined Horizontal Category Pills with Fade Indicator */}
           <div className="relative overflow-hidden border-b border-zinc-100 dark:border-zinc-900">
             <div className="flex items-center gap-1.5 overflow-x-auto pb-2 pr-14 scrollbar-hide select-none">
-              {categories.map((cat) => (
+              {CATEGORIES.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => onSelectCategory(cat)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition flex items-center gap-1.5 whitespace-nowrap ${
                     selectedCategory === cat
-                      ? 'bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-950 shadow-xs'
-                      : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-900'
+                      ? 'bg-zinc-100 text-zinc-900 shadow-sm dark:bg-zinc-100 dark:text-zinc-900'
+                      : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
                   }`}
                 >
-                  {cat}
+                  <span>{cat}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                    selectedCategory === cat 
+                      ? 'bg-zinc-300 text-zinc-900 font-bold' 
+                      : 'bg-zinc-800 text-zinc-400'
+                  }`}>
+                    {categoryCounts[cat] || 0}
+                  </span>
                 </button>
               ))}
             </div>
@@ -475,7 +512,24 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
 
           {/* Chronological Post Cards */}
           <div className="space-y-4">
-            {filteredPosts.length === 0 ? (
+            {isLoadingPosts ? (
+              <div className="space-y-4 my-6">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="p-5 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-white dark:bg-zinc-900/30 animate-pulse">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-full bg-zinc-200 dark:bg-zinc-800" />
+                      <div className="space-y-2 flex-1">
+                        <div className="w-32 h-3.5 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                        <div className="w-48 h-2.5 bg-zinc-200/60 dark:bg-zinc-800/60 rounded" />
+                      </div>
+                    </div>
+                    <div className="w-3/4 h-4 bg-zinc-200 dark:bg-zinc-800 rounded mb-2.5" />
+                    <div className="w-full h-3 bg-zinc-200/60 dark:bg-zinc-800/60 rounded mb-2" />
+                    <div className="w-2/3 h-3 bg-zinc-200/60 dark:bg-zinc-800/60 rounded" />
+                  </div>
+                ))}
+              </div>
+            ) : filteredPosts.length === 0 ? (
               <div className="flex flex-col items-center justify-center p-12 text-center border border-zinc-200 dark:border-zinc-800 rounded-xl bg-white dark:bg-zinc-950/40 my-6 shadow-sm" id="feed-empty">
                 <div className="p-3 bg-zinc-100 dark:bg-zinc-900 rounded-full mb-3 text-zinc-400">
                   <MessageSquare className="w-6 h-6" />
@@ -491,16 +545,27 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
                     : `There are no posts under "${selectedCategory}" in this community yet.`}
                 </p>
                 {selectedCategory !== 'All' ? (
-                  <button
-                    onClick={() => onSelectCategory('All')}
-                    className="px-4 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg transition"
-                  >
-                    Clear filter
-                  </button>
+                  <div className="flex gap-2.5 mt-4">
+                    <button
+                      onClick={() => onSelectCategory('All')}
+                      className="px-4 py-2 text-xs font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition cursor-pointer"
+                    >
+                      Clear filter
+                    </button>
+                    <button
+                      onClick={() => {
+                        setCategory(selectedCategory);
+                        setShowCreateBox(true);
+                      }}
+                      className="px-4 py-2 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition cursor-pointer"
+                    >
+                      + Post in {selectedCategory}
+                    </button>
+                  </div>
                 ) : (
                   <button
                     onClick={() => setShowCreateBox(true)}
-                    className="px-4 py-2 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition"
+                    className="mt-4 px-4 py-2 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition cursor-pointer"
                   >
                     + Publish First Post
                   </button>

@@ -34,7 +34,9 @@ import {
   ShieldAlert,
   Mail,
   User as UserIcon,
-  Sparkle
+  Sparkle,
+  Share2,
+  Download
 } from 'lucide-react';
 
 import { mockCategories } from './data/mockData';
@@ -120,7 +122,6 @@ import { CreateCommunityModal } from './components/CreateCommunityModal';
 import { EditProfileModal } from './components/EditProfileModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { UserProfileModal } from './components/UserProfileModal';
-import { usePWAInstall } from './hooks/usePWAInstall';
 import { useAuth, AuthContextType, formatAuthError } from './lib/auth';
 import { CommunityProvider, useCommunity } from './context/CommunityContext';
 import { 
@@ -442,7 +443,37 @@ function AppContent({ auth }: { auth: AuthContextType }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const { isInstallable, install } = usePWAInstall();
+  // PWA Install Flow
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
+
+  useEffect(() => {
+    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
+      setIsStandalone(true);
+    }
+
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+        showToast('Work Connect installed!');
+      }
+    } else {
+      // Open fallback help modal explaining browser-specific install steps
+      setShowInstallHelp(true);
+    }
+  };
 
   // Find active community
   const activeCommunity = contextActiveCommunity || communities.find(c => c.id === selectedCommunityId) || communities[0];
@@ -1067,7 +1098,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
     );
   }
 
-  const isAnyModalOpen = showCreateModal || showProfileModal || showSearchModal || showAuthModal || !!inspectingUser;
+  const isAnyModalOpen = showCreateModal || showProfileModal || showSearchModal || showAuthModal || showInstallHelp || !!inspectingUser;
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 flex flex-col font-sans select-none antialiased">
@@ -1082,20 +1113,24 @@ function AppContent({ auth }: { auth: AuthContextType }) {
       <header className="sticky top-0 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md border-b border-zinc-200/60 dark:border-zinc-900/80 z-40 px-4 h-15 flex items-center shadow-xs">
         <div className="max-w-7xl mx-auto w-full flex items-center justify-between gap-4">
           
-          {/* Logo & Cohort switcher */}
+          {/* Left Group: Back to Portal divider and Community Name / Workspace Badge */}
           <div className="flex items-center gap-3">
             {viewMode === 'community' ? (
               <button 
                 onClick={handleBackToPortal}
-                className="flex items-center gap-1.5 text-xs font-bold text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200 px-3 py-2 min-h-[36px] rounded-xl transition-all dark:text-zinc-300 dark:hover:text-white dark:bg-zinc-900 dark:hover:bg-zinc-800 shadow-sm"
+                className="flex items-center gap-1.5 text-xs font-bold text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200 px-3 py-2 min-h-[36px] rounded-xl transition-all dark:text-zinc-300 dark:hover:text-white dark:bg-zinc-900 dark:hover:bg-zinc-800 shadow-sm cursor-pointer"
                 id="back-to-portal-breadcrumb"
+                aria-label="Back to Portal"
+                title="Back to Portal"
               >
                 <span>← Back to Portal</span>
               </button>
             ) : (
               <button 
                 onClick={handleBackToPortal}
-                className="flex items-center gap-2"
+                className="flex items-center gap-2 cursor-pointer"
+                aria-label="Work Connect Home"
+                title="Work Connect Home"
               >
                 <div className="h-7 w-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-extrabold shadow-sm hover:scale-105 transition-transform">
                   <span>W</span>
@@ -1174,13 +1209,15 @@ function AppContent({ auth }: { auth: AuthContextType }) {
             </nav>
           )}
 
-          {/* Right Action Widgets */}
+          {/* Right Group: Search, Notifications, Install, User Profile */}
           <div className="flex items-center gap-3">
             
             {/* Search Trigger (⌘K) */}
             <button 
               onClick={() => setShowSearchModal(true)}
-              className="flex items-center justify-center p-2 rounded-lg bg-zinc-50 border border-zinc-100 hover:bg-zinc-100 text-zinc-400 dark:bg-zinc-900 dark:border-zinc-800 dark:hover:bg-zinc-850"
+              aria-label="Search posts and members"
+              title="Search posts and members"
+              className="flex items-center justify-center p-2 rounded-lg bg-zinc-50 border border-zinc-100 hover:bg-zinc-100 text-zinc-400 dark:bg-zinc-900 dark:border-zinc-800 dark:hover:bg-zinc-850 cursor-pointer"
             >
               <Search className="h-4 w-4" />
             </button>
@@ -1190,7 +1227,9 @@ function AppContent({ auth }: { auth: AuthContextType }) {
               <div className="relative">
                 <button 
                   onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
-                  className="p-2 rounded-lg bg-zinc-50 border border-zinc-100 hover:bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:border-zinc-800 dark:hover:bg-zinc-850 relative"
+                  aria-label="View notifications"
+                  title="View notifications"
+                  className="p-2 rounded-lg bg-zinc-50 border border-zinc-100 hover:bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:border-zinc-800 dark:hover:bg-zinc-850 relative cursor-pointer"
                 >
                   <Bell className="h-4 w-4" />
                   {appNotifications.some(n => !n.read) && (
@@ -1215,7 +1254,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
                               setAppNotifications(prev => prev.map(n => ({ ...n, read: true })));
                               showToast('All notifications marked read.');
                             }}
-                            className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400"
+                            className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer"
                           >
                             Mark read
                           </button>
@@ -1245,7 +1284,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
             {viewMode === 'portal' && (
               <button 
                 onClick={handleCreateCommunityClick}
-                className="hidden md:flex items-center gap-1.5 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900 transition-all"
+                className="hidden md:flex items-center gap-1.5 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900 transition-all cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5 text-indigo-500" />
                 <span>Create Community</span>
@@ -1253,10 +1292,12 @@ function AppContent({ auth }: { auth: AuthContextType }) {
             )}
 
             {/* PWA Direct trigger */}
-            {isInstallable && (
+            {!isStandalone && (
               <button 
-                onClick={install}
-                className="hidden sm:flex items-center gap-1 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                onClick={handleInstallClick}
+                aria-label="Install Work Connect app"
+                title="Install Work Connect app"
+                className="hidden sm:flex items-center gap-1 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900 cursor-pointer"
               >
                 <span>Install</span>
               </button>
@@ -1267,6 +1308,8 @@ function AppContent({ auth }: { auth: AuthContextType }) {
               <div className="relative" ref={profileDropdownRef}>
                 <button 
                   onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+                  aria-label="Account settings and profile"
+                  title="Account settings and profile"
                   className="flex items-center gap-2 cursor-pointer focus:outline-none"
                   id="profile-dropdown-trigger"
                 >
@@ -1723,6 +1766,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
                   onOpenNewsletterComposeWithContent={handleOpenNewsletterComposeWithContent}
                   onSelectUser={(u) => setInspectingUser(u)}
                   showToast={showToast}
+                  isLoadingPosts={dbLoading}
                 />
               )}
 
@@ -1951,6 +1995,88 @@ function AppContent({ auth }: { auth: AuthContextType }) {
         setSuHeadline={setSuHeadline}
         handleAuthSubmit={handleAuthSubmit}
       />
+
+      {/* PWA Install Instructions Fallback Modal */}
+      <AnimatePresence>
+        {showInstallHelp && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowInstallHelp(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-xs"
+            />
+            
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="relative w-full max-w-md bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 p-6 z-10 overflow-hidden"
+            >
+              <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-xs">
+                    <Download className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-zinc-900 dark:text-white">Install Work Connect</h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">Install as an app on your device</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowInstallHelp(false)}
+                  className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-4">
+                <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                  To install Work Connect directly to your home screen or desktop:
+                </p>
+
+                {/* Chrome / Edge Instructions */}
+                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/70 dark:border-zinc-800 flex items-start gap-3">
+                  <div className="h-7 w-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
+                    <Laptop className="h-4 w-4" />
+                  </div>
+                  <div className="text-xs">
+                    <span className="font-semibold text-zinc-900 dark:text-white block">Chrome, Edge & Brave</span>
+                    <span className="text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                      Click the <strong className="text-zinc-800 dark:text-zinc-200">Install</strong> icon in the address bar, or click <strong className="text-zinc-800 dark:text-zinc-200">⋯ (Menu) &gt; Install Work Connect</strong>.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Safari / iOS Instructions */}
+                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/70 dark:border-zinc-800 flex items-start gap-3">
+                  <div className="h-7 w-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
+                    <Share2 className="h-4 w-4" />
+                  </div>
+                  <div className="text-xs">
+                    <span className="font-semibold text-zinc-900 dark:text-white block">Safari (iOS & macOS)</span>
+                    <span className="text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                      Tap the <strong className="text-zinc-800 dark:text-zinc-200">Share</strong> button, scroll down, and tap <strong className="text-zinc-800 dark:text-zinc-200">Add to Home Screen</strong>.
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowInstallHelp(false)}
+                  className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors cursor-pointer shadow-sm shadow-indigo-600/20"
+                >
+                  Got It
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <OfflineIndicator />
 

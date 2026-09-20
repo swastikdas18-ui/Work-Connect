@@ -46,6 +46,7 @@ export interface Post {
   title: string;
   body: string;
   media_url?: string;
+  image_url?: string;
   upvotes_count: number;
   comments_count: number;
   created_at: string;
@@ -751,7 +752,7 @@ export async function getHydratedPosts(communityId: string, currentUserId?: stri
       author,
       title: p.title,
       content: p.body,
-      mediaUrl: p.media_url,
+      mediaUrl: p.image_url || p.media_url,
       category: p.category,
       timestamp: new Date(p.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' }),
       upvotes: p.upvotes_count || 0,

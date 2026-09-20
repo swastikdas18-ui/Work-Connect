@@ -392,7 +392,13 @@ function AppContent({ auth }: { auth: AuthContextType }) {
         getHydratedEvents(communityId, user ? user.id : undefined),
         getHydratedNewsletters(communityId)
       ]);
-      setPosts(hydratedPosts);
+      setPosts((prevPosts) => {
+        // Create a map by id to prevent duplicates, with hydratedPosts taking precedence for existing items,
+        // while preserving any very recently created local posts that might not yet be indexed.
+        const fetchedIds = new Set(hydratedPosts.map(p => p.id));
+        const pendingLocalPosts = prevPosts.filter(p => !fetchedIds.has(p.id) && p.timestamp === 'Just now');
+        return [...pendingLocalPosts, ...hydratedPosts];
+      });
       setCourses(hydratedCourses);
       setEvents(hydratedEvents);
       setBroadcasts(hydratedNewsletters);
@@ -705,22 +711,30 @@ function AppContent({ auth }: { auth: AuthContextType }) {
       createdPostRecord = newPost;
 
       // Prepend newly created post to active feed (initialized at 0 upvotes)
+      const authorDetails: User = {
+        ...mappedCurrentUser,
+        id: user?.id || (session as any)?.user?.id || mappedCurrentUser.id,
+        name: user?.full_name || (session as any)?.user?.user_metadata?.full_name || mappedCurrentUser.name || 'Community Member',
+        cohort: user?.headline || (session as any)?.user?.user_metadata?.headline || mappedCurrentUser.cohort || '',
+        avatar: user?.avatar_url || (session as any)?.user?.user_metadata?.avatar_url || mappedCurrentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80',
+      };
+
       const formattedNewPost: Post = {
         id: createdPostRecord?.id || generateId('p'),
         communityId: selectedCommunityId,
-        author: mappedCurrentUser,
+        author: authorDetails,
         title: postData.title.trim(),
         content: postData.content.trim(),
         codeSnippet: postData.codeSnippet,
-        mediaUrl: resolvedMediaUrl,  // Use storage publicUrl, not base64
-        category: postData.category,
+        mediaUrl: resolvedMediaUrl || (createdPostRecord as any)?.image_url || (createdPostRecord as any)?.media_url || undefined,
+        category: postData.category || 'Discussions',
         timestamp: 'Just now',
         upvotes: 0,
         hasUpvoted: false,
         comments: []
       };
 
-      setPosts((prev) => [formattedNewPost, ...prev]);
+      setPosts((prev) => [formattedNewPost, ...(prev || [])]);
       lastPostTimestampRef.current = Date.now();
       showToast('Thread published on the cohort feed!');
 

@@ -136,7 +136,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
       // Must match communityId
       const matchesCommunity = post.communityId === activeCommunity.id;
       // Category match (All maps to any)
-      const matchesCategory = selectedCategory === 'All' || post.category === selectedCategory;
+      const matchesCategory = selectedCategory === 'All' || post.category?.toLowerCase() === selectedCategory?.toLowerCase();
       // Search term match
       const matchesSearch = searchQuery === '' || 
         post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -146,7 +146,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
       return matchesCommunity && matchesCategory && matchesSearch;
     })
     .sort((a, b) => {
-      if (sortBy === 'newest') return 1; // Reverse mock array chronological order
+      if (sortBy === 'newest') return 0; // Maintain feed array order (newly prepended posts stay on top)
       if (sortBy === 'top') return b.upvotes - a.upvotes;
       return (b.upvotes + b.comments.length * 3) - (a.upvotes + a.comments.length * 3); // activity weight
     });

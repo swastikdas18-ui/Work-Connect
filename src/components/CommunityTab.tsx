@@ -158,13 +158,8 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
     // Client-side 2-second cooldown guard — always show feedback
     const now = Date.now();
     const COOLDOWN_MS = 2000;
-    if (now - lastPostTimestampRef.current < COOLDOWN_MS) {
+    if (now - lastPostTimestampRef.current < COOLDOWN_MS || isSubmitting) {
       showToast?.('You are doing that a bit too fast. Please wait a few seconds.');
-      return;
-    }
-
-    if (isSubmitting) {
-      showToast?.('Your post is still being published…');
       return;
     }
 

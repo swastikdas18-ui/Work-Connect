@@ -39,6 +39,7 @@ import {
 
 import { mockCategories } from './data/mockData';
 import { compressImage } from './utils/imageCompressor';
+import { uploadToCloudinary } from './lib/cloudinary';
 
 import { User, Post, CourseTrack, CalendarEvent, Broadcast, Comment, Community } from './types';
 import { CommunityTab } from './components/CommunityTab';
@@ -654,12 +655,8 @@ function AppContent({ auth }: { auth: AuthContextType }) {
     // ── Client-side 2-second cooldown guard ──
     const now = Date.now();
     const COOLDOWN_MS = 2000;
-    if (now - lastPostTimestampRef.current < COOLDOWN_MS) {
+    if (now - lastPostTimestampRef.current < COOLDOWN_MS || isSubmittingPost) {
       showToast('You are doing that a bit too fast. Please wait a few seconds.');
-      return;
-    }
-    if (isSubmittingPost) {
-      showToast('Your post is still being published…');
       return;
     }
 
@@ -667,30 +664,15 @@ function AppContent({ auth }: { auth: AuthContextType }) {
     try {
       let createdPostRecord: any;
 
-      // ── Step 1: Upload image to Supabase Storage and resolve a stable publicUrl ──
+      // ── Step 1: Upload image to Cloudinary and resolve a stable secure_url ──
       let resolvedMediaUrl: string | undefined = undefined;
-      if (postData.mediaFile && isSupabaseConfigured) {
+      if (postData.mediaFile) {
         try {
           const { blob: compressedBlob } = await compressImage(postData.mediaFile, { maxDimension: 1400, quality: 0.8 });
-          const safeName = postData.mediaFile.name.replace(/[^a-zA-Z0-9.-]/g, '');
-          const fileName = `${selectedCommunityId}/${Date.now()}-${safeName}`;
-
-          const { error: uploadError } = await supabase.storage
-            .from('post-attachments')
-            .upload(fileName, compressedBlob, {
-              contentType: 'image/webp',
-              cacheControl: '3600',
-              upsert: false,
-            });
-
-          if (uploadError) {
-            console.warn('Image upload failed, skipping attachment:', uploadError.message);
-          } else {
-            const { data: urlData } = supabase.storage.from('post-attachments').getPublicUrl(fileName);
-            resolvedMediaUrl = urlData?.publicUrl;
-          }
-        } catch (uploadErr) {
-          console.warn('Image compression/upload error, skipping attachment:', uploadErr);
+          resolvedMediaUrl = await uploadToCloudinary(compressedBlob);
+        } catch (uploadErr: any) {
+          console.warn('Image upload failed, skipping attachment:', uploadErr);
+          showToast(uploadErr?.message || 'Failed to upload image to Cloudinary.');
         }
       }
 
@@ -709,8 +691,9 @@ function AppContent({ auth }: { auth: AuthContextType }) {
 
       if (error) {
         if (
-          error.message?.includes('RATE_LIMIT_EXCEEDED') ||
-          error.message?.toLowerCase().includes('rate limit')
+          error.message?.toLowerCase().includes('rate_limit') ||
+          error.message?.toLowerCase().includes('rate limit') ||
+          error.message?.toLowerCase().includes('too fast')
         ) {
           showToast('You are doing that a bit too fast. Please wait a few seconds.');
           return;
@@ -763,7 +746,11 @@ function AppContent({ auth }: { auth: AuthContextType }) {
       }
     } catch (e: any) {
       console.error(e);
-      if (e?.message && (e.message.includes('RATE_LIMIT_EXCEEDED') || e.message.toLowerCase().includes('rate limit'))) {
+      if (
+        e?.message?.toLowerCase().includes('rate_limit') ||
+        e?.message?.toLowerCase().includes('rate limit') ||
+        e?.message?.toLowerCase().includes('too fast')
+      ) {
         showToast('You are doing that a bit too fast. Please wait a few seconds.');
       } else {
         showToast(e?.message || 'Failed to publish post.');

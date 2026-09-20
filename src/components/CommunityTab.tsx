@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   MessageSquare, 
@@ -45,6 +45,7 @@ interface CommunityTabProps {
   leaderboardUsers: User[];
   onOpenNewsletterComposeWithContent?: (subject: string, content: string) => void;
   onSelectUser?: (user: User) => void;
+  showToast?: (message: string) => void;
 }
 
 export const CommunityTab: React.FC<CommunityTabProps> = ({
@@ -60,7 +61,8 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
   currentUser,
   leaderboardUsers,
   onOpenNewsletterComposeWithContent,
-  onSelectUser
+  onSelectUser,
+  showToast
 }) => {
   const [sortBy, setSortBy] = useState<'activity' | 'newest' | 'top'>('activity');
   const [showCreateBox, setShowCreateBox] = useState(false);
@@ -81,6 +83,9 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
   } | null>(null);
   const [isCompressingImage, setIsCompressingImage] = useState(false);
   const [compressionError, setCompressionError] = useState<string | null>(null);
+
+  // Client-side cooldown ref to track last successful post timestamp
+  const lastPostTimestampRef = useRef<number>(0);
 
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -148,7 +153,20 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
 
   const handleSubmitPost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !content.trim() || isSubmitting || isCompressingImage) return;
+    if (!title.trim() || !content.trim() || isCompressingImage) return;
+
+    // Client-side 2-second cooldown guard — always show feedback
+    const now = Date.now();
+    const COOLDOWN_MS = 2000;
+    if (now - lastPostTimestampRef.current < COOLDOWN_MS) {
+      showToast?.('You are doing that a bit too fast. Please wait a few seconds.');
+      return;
+    }
+
+    if (isSubmitting) {
+      showToast?.('Your post is still being published…');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -161,6 +179,9 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
         category: category === 'All' ? 'Discussions' : category
       }, sendAsNewsletter);
 
+      // Mark successful post timestamp for cooldown tracking
+      lastPostTimestampRef.current = Date.now();
+
       // Reset Form State
       setTitle('');
       setContent('');
@@ -172,10 +193,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
     } catch (err) {
       console.error(err);
     } finally {
-      // Keep submit disabled for 2 seconds (cooldown)
-      setTimeout(() => {
-        setIsSubmitting(false);
-      }, 2000);
+      setIsSubmitting(false);
     }
   };
 
@@ -405,8 +423,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
 
                 <button 
                   type="submit"
-                  disabled={isSubmitting}
-                  className="bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs px-4 py-2 rounded-lg transition-all dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={`bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs px-4 py-2 rounded-lg transition-all dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 flex items-center gap-1.5 ${isSubmitting ? 'opacity-60 cursor-wait' : ''}`}
                 >
                   {isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   <span>{isSubmitting ? 'Publishing...' : 'Publish Post'}</span>

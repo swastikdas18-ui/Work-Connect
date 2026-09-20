@@ -261,6 +261,10 @@ function AppContent({ auth }: { auth: AuthContextType }) {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  // Post submission cooldown tracking
+  const lastPostTimestampRef = useRef<number>(0);
+  const [isSubmittingPost, setIsSubmittingPost] = useState(false);
+
   useEffect(() => {
     if (user && pendingCreateCommunity) {
       setShowCreateModal(true);
@@ -646,6 +650,20 @@ function AppContent({ auth }: { auth: AuthContextType }) {
   const handleAddPost = async (postData: { title: string; content: string; codeSnippet?: string; mediaUrl?: string; mediaFile?: File; category: string }, sendAsNewsletter: boolean) => {
     if (!ensureUserAuthenticated('publish posts')) return;
     if (!user || !selectedCommunityId) return;
+
+    // ── Client-side 2-second cooldown guard ──
+    const now = Date.now();
+    const COOLDOWN_MS = 2000;
+    if (now - lastPostTimestampRef.current < COOLDOWN_MS) {
+      showToast('You are doing that a bit too fast. Please wait a few seconds.');
+      return;
+    }
+    if (isSubmittingPost) {
+      showToast('Your post is still being published…');
+      return;
+    }
+
+    setIsSubmittingPost(true);
     try {
       let createdPostRecord: any;
 
@@ -720,6 +738,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
       };
 
       setPosts((prev) => [formattedNewPost, ...prev]);
+      lastPostTimestampRef.current = Date.now();
       showToast('Thread published on the cohort feed!');
 
       // If user wants to draft/broadcast this automatically to the newsletter studio
@@ -749,6 +768,8 @@ function AppContent({ auth }: { auth: AuthContextType }) {
       } else {
         showToast(e?.message || 'Failed to publish post.');
       }
+    } finally {
+      setIsSubmittingPost(false);
     }
   };
 
@@ -1700,6 +1721,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
                   leaderboardUsers={leaderboardUsers}
                   onOpenNewsletterComposeWithContent={handleOpenNewsletterComposeWithContent}
                   onSelectUser={(u) => setInspectingUser(u)}
+                  showToast={showToast}
                 />
               )}
 

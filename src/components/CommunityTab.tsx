@@ -151,14 +151,13 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
       return (b.upvotes + b.comments.length * 3) - (a.upvotes + a.comments.length * 3); // activity weight
     });
 
-  const handleSubmitPost = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmitPost = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!title.trim() || !content.trim() || isCompressingImage) return;
 
-    // Client-side 2-second cooldown guard — always show feedback
     const now = Date.now();
-    const COOLDOWN_MS = 2000;
-    if (now - lastPostTimestampRef.current < COOLDOWN_MS || isSubmitting) {
+    // Guard: In-flight or rapid burst cooldown (< 2000ms)
+    if (isSubmitting || now - lastPostTimestampRef.current < 2000) {
       showToast?.('You are doing that a bit too fast. Please wait a few seconds.');
       return;
     }
@@ -177,7 +176,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
       // Mark successful post timestamp for cooldown tracking
       lastPostTimestampRef.current = Date.now();
 
-      // Reset Form State
+      // Reset Form State & close composer on success
       setTitle('');
       setContent('');
       setCodeSnippet('');
@@ -185,8 +184,14 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
       setCategory('All');
       setSendAsNewsletter(false);
       setShowCreateBox(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      const msg = (err?.message || '').toLowerCase();
+      if (msg.includes('rate_limit') || msg.includes('too fast')) {
+        showToast?.('You are doing that a bit too fast. Please wait a few seconds.');
+      } else {
+        showToast?.(err?.message || 'Failed to publish post');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -418,7 +423,11 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
 
                 <button 
                   type="submit"
-                  className={`bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs px-4 py-2 rounded-lg transition-all dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 flex items-center gap-1.5 ${isSubmitting ? 'opacity-60 cursor-wait' : ''}`}
+                  onClick={handleSubmitPost}
+                  aria-busy={isSubmitting}
+                  className={`bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs px-4 py-2 rounded-lg transition-all dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 flex items-center gap-1.5 ${
+                    isSubmitting ? 'opacity-70 cursor-wait' : 'cursor-pointer'
+                  }`}
                 >
                   {isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   <span>{isSubmitting ? 'Publishing...' : 'Publish Post'}</span>
@@ -463,19 +472,35 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
           {/* Chronological Post Cards */}
           <div className="space-y-4">
             {filteredPosts.length === 0 ? (
-              <div className="bg-white border border-zinc-200 rounded-xl p-12 text-center text-zinc-400 dark:bg-zinc-950 dark:border-zinc-850 max-w-xl mx-auto" id="feed-empty">
-                <MessageSquare className="h-10 w-10 text-zinc-300 mx-auto mb-4 animate-pulse" />
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">This feed is silent.</h3>
-                <p className="text-xs text-zinc-400 mt-2 dark:text-zinc-400 leading-relaxed max-w-sm mx-auto">
-                  Be the first to share an announcement, ask a question, or post a win!
+              <div className="flex flex-col items-center justify-center p-12 text-center border border-zinc-200 dark:border-zinc-800 rounded-xl bg-white dark:bg-zinc-950/40 my-6 shadow-sm" id="feed-empty">
+                <div className="p-3 bg-zinc-100 dark:bg-zinc-900 rounded-full mb-3 text-zinc-400">
+                  <MessageSquare className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-200">
+                  {selectedCategory === 'All'
+                    ? 'This feed is silent'
+                    : `No ${selectedCategory.toLowerCase()} yet`}
+                </h3>
+                <p className="text-sm text-zinc-500 max-w-sm mt-1 mb-4">
+                  {selectedCategory === 'All'
+                    ? 'Be the first to share an announcement, ask a question, or post a win!'
+                    : `There are no posts under "${selectedCategory}" in this community yet.`}
                 </p>
-                <button
-                  onClick={() => setShowCreateBox(true)}
-                  className="mt-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-md inline-flex items-center gap-1.5"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>Publish First Post</span>
-                </button>
+                {selectedCategory !== 'All' ? (
+                  <button
+                    onClick={() => onSelectCategory('All')}
+                    className="px-4 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg transition"
+                  >
+                    Clear filter
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowCreateBox(true)}
+                    className="px-4 py-2 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition"
+                  >
+                    + Publish First Post
+                  </button>
+                )}
               </div>
             ) : (
               <AnimatePresence mode="popLayout">

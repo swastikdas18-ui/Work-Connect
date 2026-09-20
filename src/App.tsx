@@ -1798,7 +1798,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
             }`}
           >
             <BookOpen className="h-5 w-5" />
-            <span className="text-[10px] font-bold mt-1">Class</span>
+            <span className="text-[10px] font-bold mt-1">Classroom</span>
           </button>
 
           <button
@@ -1818,7 +1818,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
             }`}
           >
             <Trophy className="h-5 w-5" />
-            <span className="text-[10px] font-bold mt-1">Ranks</span>
+            <span className="text-[10px] font-bold mt-1">Leaderboard</span>
           </button>
 
           <button

@@ -84,7 +84,9 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
   const [isCompressingImage, setIsCompressingImage] = useState(false);
   const [compressionError, setCompressionError] = useState<string | null>(null);
 
-  // Client-side cooldown ref to track last successful post timestamp
+  // Synchronous Mutex Ref to prevent race conditions during rapid double-clicks
+  const isSubmittingRef = useRef<boolean>(false);
+  // Client-side cooldown ref to track last post timestamp
   const lastPostTimestampRef = useRef<number>(0);
 
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -156,13 +158,17 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
     if (!title.trim() || !content.trim() || isCompressingImage) return;
 
     const now = Date.now();
-    // Guard: In-flight or rapid burst cooldown (< 2000ms)
-    if (isSubmitting || now - lastPostTimestampRef.current < 2000) {
+    // Synchronous check: blocks immediately on subsequent clicks within the same or rapid ticks
+    if (isSubmittingRef.current || (now - lastPostTimestampRef.current) < 2000) {
       showToast?.('You are doing that a bit too fast. Please wait a few seconds.');
       return;
     }
 
+    // Lock immediately before any async task or state scheduling
+    isSubmittingRef.current = true;
+    lastPostTimestampRef.current = now;
     setIsSubmitting(true);
+
     try {
       await onAddPost({
         title,
@@ -172,9 +178,6 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
         mediaFile: selectedImage?.file || undefined,
         category: category === 'All' ? 'Discussions' : category
       }, sendAsNewsletter);
-
-      // Mark successful post timestamp for cooldown tracking
-      lastPostTimestampRef.current = Date.now();
 
       // Reset Form State & close composer on success
       setTitle('');
@@ -193,6 +196,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
         showToast?.(err?.message || 'Failed to publish post');
       }
     } finally {
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };

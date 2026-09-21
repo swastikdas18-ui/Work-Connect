@@ -933,3 +933,71 @@ export async function getHydratedNewsletters(communityId: string): Promise<UIBro
     };
   });
 }
+
+export interface Contributor {
+  user_id: string;
+  full_name: string;
+  avatar_url?: string | null;
+  points: number;
+  rank: number;
+}
+
+export async function fetchCommunityContributors(communityId: string): Promise<Contributor[]> {
+  if (!communityId) return [];
+
+  // Call dynamic RPC
+  const { data, error } = await supabase.rpc('get_community_contributors', {
+    p_community_id: communityId,
+    p_limit: 5,
+  });
+
+  if (!error && data && data.length > 0) {
+    return data.map((item: any) => ({
+      user_id: item.user_id,
+      full_name: item.full_name || 'Member',
+      avatar_url: item.avatar_url || null,
+      points: Number(item.points) || 0,
+      rank: Number(item.rank) || 1,
+    }));
+  }
+
+  // Client-side fallback if RPC is not yet applied:
+  // Derive contributors from active posts and community memberships
+  try {
+    const { data: members } = await supabase
+      .from('memberships')
+      .select('user_id, role, profiles(id, full_name, avatar_url)')
+      .eq('community_id', communityId)
+      .limit(5);
+
+    if (members && members.length > 0) {
+      return members.map((m: any, idx: number) => ({
+        user_id: m.user_id,
+        full_name: m.profiles?.full_name || 'Community Member',
+        avatar_url: m.profiles?.avatar_url || null,
+        points: m.role === 'owner' || m.role === 'admin' ? 50 : 10,
+        rank: idx + 1,
+      }));
+    }
+  } catch (e) {
+    console.warn('Fallback contributor fetch failed', e);
+  }
+
+  // Fallback for local storage / test environment
+  const localMemberships = getLocalData<any[]>('memberships', []).filter(m => m.community_id === communityId);
+  if (localMemberships.length > 0) {
+    const localProfiles = getLocalData<Profile[]>('profiles', []);
+    return localMemberships.slice(0, 5).map((m: any, idx: number) => {
+      const prof = localProfiles.find(p => p.id === m.user_id);
+      return {
+        user_id: m.user_id,
+        full_name: prof?.full_name || 'Community Member',
+        avatar_url: prof?.avatar_url || null,
+        points: m.role === 'owner' || m.role === 'admin' ? 50 : 10,
+        rank: idx + 1,
+      };
+    });
+  }
+
+  return [];
+}

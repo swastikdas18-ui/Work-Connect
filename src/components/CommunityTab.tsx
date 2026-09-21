@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   MessageSquare, 
@@ -28,10 +28,12 @@ import {
   X as CloseIcon,
   AlertCircle,
   Lightbulb,
-  Award
+  Award,
+  Users
 } from 'lucide-react';
 import { Post, User, CalendarEvent, Community } from '../types';
 import { compressImage, fileToDataUrl, formatFileSize } from '../utils/imageCompressor';
+import { fetchCommunityContributors, Contributor } from '../lib/supabase';
 
 interface CommunityTabProps {
   activeCommunity: Community;
@@ -160,6 +162,28 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
   // Active comment drawer
   const [activePostForComments, setActivePostForComments] = useState<Post | null>(null);
   const [newCommentText, setNewCommentText] = useState('');
+
+  // Dynamic Community Contributors
+  const [contributors, setContributors] = useState<Contributor[]>([]);
+  const [isLoadingContributors, setIsLoadingContributors] = useState<boolean>(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!activeCommunity?.id) return;
+
+    setIsLoadingContributors(true);
+    fetchCommunityContributors(String(activeCommunity.id))
+      .then((res) => {
+        if (isMounted) setContributors(res);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingContributors(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeCommunity?.id]);
 
   // Search filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -840,32 +864,73 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
             </div>
           </div>
 
-          {/* Compact Mini Leaderboard (Top 3 contributors only) */}
+          {/* Dynamic Community Contributors Widget */}
           <div className="bg-[#141417] rounded-2xl border border-white/[0.08] p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
             <div className="flex items-center justify-between mb-2.5">
               <h4 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
                 <Trophy className="h-4 w-4 text-amber-400" />
                 Contributors
               </h4>
-              <span className="text-[10px] font-semibold text-zinc-500 font-mono">7 Days</span>
+              <span className="text-[10px] font-semibold text-zinc-500 font-mono">Hub Activity</span>
             </div>
 
-            <div className="space-y-2.5">
-              {leaderboardUsers.slice(0, 3).map((user, idx) => (
-                <div 
-                  key={user.id} 
-                  onClick={() => onSelectUser && onSelectUser(user)}
-                  className="flex items-center justify-between cursor-pointer p-1.5 rounded-xl hover:bg-white/[0.04] transition-colors group"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-xs font-semibold text-zinc-500 w-3">#{idx + 1}</span>
-                    <img src={user.avatar} alt={user.name} className="w-6.5 h-6.5 rounded-full object-cover ring-1 ring-white/10 group-hover:ring-indigo-500/50" />
-                    <span className="text-xs font-medium text-zinc-300 truncate group-hover:text-indigo-400 transition-colors">{user.name}</span>
+            {isLoadingContributors ? (
+              <div className="space-y-2.5 py-1">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-center justify-between p-1.5 animate-pulse">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-zinc-800/80 rounded" />
+                      <div className="w-6.5 h-6.5 rounded-full bg-zinc-800/80" />
+                      <div className="w-24 h-3 bg-zinc-800/80 rounded" />
+                    </div>
+                    <div className="w-8 h-3 bg-zinc-800/80 rounded" />
                   </div>
-                  <span className="text-xs font-medium text-zinc-400 font-mono">{user.points}p</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : contributors.length === 0 ? (
+              <div className="py-4 text-center">
+                <Users className="w-5 h-5 mx-auto text-zinc-600 mb-1.5 opacity-60" />
+                <p className="text-xs text-zinc-400 font-normal leading-relaxed">
+                  No active contributors yet. Be the first to post!
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {contributors.map((c) => (
+                  <div 
+                    key={c.user_id} 
+                    onClick={() => onSelectUser && onSelectUser({
+                      id: c.user_id,
+                      name: c.full_name,
+                      avatar: c.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80',
+                      cohort: 'Member',
+                      level: 1,
+                      points: c.points
+                    })}
+                    className="flex items-center justify-between cursor-pointer p-1.5 rounded-xl hover:bg-white/[0.04] transition-colors group"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-xs font-semibold text-zinc-500 w-3">#{c.rank}</span>
+                      {c.avatar_url ? (
+                        <img 
+                          src={c.avatar_url} 
+                          alt={c.full_name} 
+                          className="w-6.5 h-6.5 rounded-full object-cover ring-1 ring-white/10 group-hover:ring-indigo-500/50" 
+                        />
+                      ) : (
+                        <div className="w-6.5 h-6.5 rounded-full bg-indigo-500/20 text-indigo-300 flex items-center justify-center text-[10px] font-bold ring-1 ring-white/10 group-hover:ring-indigo-500/50">
+                          {c.full_name.slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <span className="text-xs font-medium text-zinc-300 truncate group-hover:text-indigo-400 transition-colors">
+                        {c.full_name}
+                      </span>
+                    </div>
+                    <span className="text-xs font-medium text-zinc-400 font-mono">{c.points}p</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
         </div>

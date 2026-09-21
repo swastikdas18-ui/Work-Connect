@@ -49,7 +49,7 @@ test.describe('Spec 04: Feed Upvotes, Spam Throttle & Rate Limits', () => {
     await expect(page.locator('text=Milestone Demo: Production RPC Gateway')).toBeVisible();
 
     // Locate upvote button for this post
-    const postCard = page.locator('xpath=//h3[contains(text(), "Milestone Demo: Production RPC Gateway")]/ancestor::div[contains(@class, "rounded-xl")]');
+    const postCard = page.locator('xpath=//h3[contains(text(), "Milestone Demo: Production RPC Gateway")]/ancestor::*[self::article or self::div][contains(@class, "rounded")]');
     const upvoteBtn = postCard.locator('button:has(svg.lucide-thumbs-up)');
 
     // Intercept RPC

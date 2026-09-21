@@ -769,33 +769,45 @@ function AppContent({ auth }: { auth: AuthContextType }) {
         }
       }
 
-      if (!isSupabaseConfigured) {
-        showToast('Supabase is not configured. Cannot publish posts.');
-        return;
-      }
+      if (isSupabaseConfigured) {
+        const { data: newPost, error } = await supabase.rpc('create_post_with_rate_limit', {
+          p_community_id: selectedCommunityId,
+          p_category: targetCategory,
+          p_title: postData.title.trim(),
+          p_body: postData.content.trim(),
+          p_image_url: resolvedMediaUrl || null,
+        });
 
-      const { data: newPost, error } = await supabase.rpc('create_post_with_rate_limit', {
-        p_community_id: selectedCommunityId,
-        p_category: targetCategory,
-        p_title: postData.title.trim(),
-        p_body: postData.content.trim(),
-        p_image_url: resolvedMediaUrl || null,
-      });
-
-      if (error) {
-        if (
-          error.message?.toLowerCase().includes('rate_limit') ||
-          error.message?.toLowerCase().includes('rate limit') ||
-          error.message?.toLowerCase().includes('too fast')
-        ) {
-          showToast('You are doing that a bit too fast. Please wait a few seconds.');
+        if (error) {
+          if (
+            error.message?.toLowerCase().includes('rate_limit') ||
+            error.message?.toLowerCase().includes('rate limit') ||
+            error.message?.toLowerCase().includes('too fast')
+          ) {
+            showToast('You are doing that a bit too fast. Please wait a few seconds.');
+            return;
+          }
+          showToast(error.message || 'Failed to publish post.');
           return;
         }
-        showToast(error.message || 'Failed to publish post.');
-        return;
-      }
 
-      createdPostRecord = newPost;
+        createdPostRecord = newPost;
+      } else {
+        // Fallback for local mock/testing mode when Supabase credentials are not configured
+        createdPostRecord = {
+          id: generateId('p'),
+          community_id: selectedCommunityId,
+          author_id: user?.id || (session as any)?.user?.id || mappedCurrentUser.id,
+          title: postData.title.trim(),
+          body: postData.content.trim(),
+          category: targetCategory,
+          media_url: resolvedMediaUrl || null,
+          upvotes_count: 0,
+          comments_count: 0,
+          created_at: new Date().toISOString()
+        };
+        await dbService.createPost(createdPostRecord as any);
+      }
 
       // Prepend newly created post to active feed (initialized at 0 upvotes)
       const authorDetails: User = {

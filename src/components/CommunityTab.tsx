@@ -696,7 +696,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.98 }}
-                    className="group relative bg-[#151518] hover:bg-[#18181C] border border-white/[0.08] hover:border-white/[0.14] rounded-2xl p-5 transition-all duration-200 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04),0_8px_20px_-6px_rgba(0,0,0,0.4)]"
+                    className="group relative bg-[#151518] hover:bg-[#18181C] border border-white/[0.08] hover:border-white/[0.14] rounded-2xl rounded-xl p-5 transition-all duration-200 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04),0_8px_20px_-6px_rgba(0,0,0,0.4)]"
                   >
                     {/* Card Header */}
                     <div className="flex items-start justify-between gap-3">

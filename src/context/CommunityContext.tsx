@@ -39,8 +39,12 @@ const loadFromLocalStorage = <T,>(key: string, fallback: T): T => {
 
 import { initialCommunities } from '../data/mockData';
 
-// Module-level singleton store (survives any component lifecycle changes)
 let globalCommunitiesCache: Community[] = loadFromLocalStorage<Community[]>(LOCAL_STORAGE_COMMUNITIES_KEY, initialCommunities);
+if (typeof window !== 'undefined' && !localStorage.getItem(LOCAL_STORAGE_COMMUNITIES_KEY) && globalCommunitiesCache.length > 0) {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_COMMUNITIES_KEY, JSON.stringify(globalCommunitiesCache));
+  } catch {}
+}
 let globalMembershipsCache: Membership[] = loadFromLocalStorage<Membership[]>(LOCAL_STORAGE_MEMBERSHIPS_KEY, []);
 let globalIsInitialized = globalCommunitiesCache.length > 0;
 

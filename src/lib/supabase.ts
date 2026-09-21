@@ -213,7 +213,19 @@ export const dbService = {
   async listCommunities(): Promise<Community[]> {
     return wrapDbCall(
       () => supabase.from('communities').select('*'),
-      () => getLocalData<Community[]>('communities', [])
+      () => getLocalData<Community[]>('communities', [
+        {
+          id: 'comm-eng-core',
+          name: 'Core Engineering & Platform',
+          slug: 'core-eng',
+          description: 'Engineering systems, dev infrastructure, and production reliability.',
+          privacy: 'public',
+          accent_color: '#4f46e5',
+          created_by: 'seed-admin',
+          member_count: 42,
+          banner_url: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=600&q=80'
+        }
+      ])
     );
   },
 

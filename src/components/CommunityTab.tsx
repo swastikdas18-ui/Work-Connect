@@ -26,7 +26,9 @@ import {
   UserCheck,
   Loader2,
   X as CloseIcon,
-  AlertCircle
+  AlertCircle,
+  Lightbulb,
+  Award
 } from 'lucide-react';
 import { Post, User, CalendarEvent, Community } from '../types';
 import { compressImage, fileToDataUrl, formatFileSize } from '../utils/imageCompressor';
@@ -299,68 +301,124 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
         <div className="col-span-1 lg:col-span-8 space-y-5 max-w-[700px] mx-auto w-full">
           
           {/* Streamlined Horizontal Category Pills with Fade Indicator */}
-          <div className="relative overflow-hidden border-b border-zinc-100 dark:border-zinc-900">
+          <div className="relative overflow-hidden border-b border-white/[0.08] pb-1">
             <div className="flex items-center gap-1.5 overflow-x-auto pb-2 pr-14 scrollbar-hide select-none">
-              {CATEGORIES.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => onSelectCategory(cat)}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition flex items-center gap-1.5 whitespace-nowrap ${
-                    selectedCategory === cat
-                      ? 'bg-zinc-100 text-zinc-900 shadow-sm dark:bg-zinc-100 dark:text-zinc-900'
-                      : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
-                  }`}
-                >
-                  <span>{cat}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                    selectedCategory === cat 
-                      ? 'bg-zinc-300 text-zinc-900 font-bold' 
-                      : 'bg-zinc-800 text-zinc-400'
-                  }`}>
-                    {categoryCounts[cat] || 0}
-                  </span>
-                </button>
-              ))}
+              {CATEGORIES.map((cat) => {
+                const isActive = selectedCategory === cat;
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => onSelectCategory(cat)}
+                    className={`px-3.5 py-1.5 rounded-full text-xs transition-all duration-150 flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                      isActive
+                        ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-semibold shadow-xs shadow-indigo-500/10'
+                        : 'bg-zinc-900/60 hover:bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 border border-white/[0.06]'
+                    }`}
+                  >
+                    <span>{cat}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                      isActive
+                        ? 'bg-indigo-400/20 text-indigo-200 font-bold'
+                        : 'bg-zinc-800/90 text-zinc-400'
+                    }`}>
+                      {categoryCounts[cat] || 0}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
             {/* Subtle Right Edge Fade for Horizontal Scroll Discovery (Prominent on Mobile) */}
             <div 
               aria-hidden="true" 
-              className="absolute right-0 top-0 bottom-2 w-14 pointer-events-none bg-gradient-to-l from-zinc-50 via-zinc-50/80 to-transparent dark:from-zinc-950 dark:via-zinc-950/80" 
+              className="absolute right-0 top-0 bottom-2 w-14 pointer-events-none bg-gradient-to-l from-[#09090B] via-[#09090B]/80 to-transparent" 
             />
           </div>
 
-          {/* Clean Composer Trigger Placeholder */}
+          {/* Clean Executive Studio Composer Trigger Card */}
           {!showCreateBox ? (
-            <button 
-              type="button"
+            <div 
               id="post-composer-trigger"
               data-testid="post-composer-trigger"
               onClick={() => handleOpenCreateBox()}
-              className="w-full text-left bg-white rounded-xl border border-zinc-200/80 p-4 shadow-sm cursor-pointer flex items-center gap-3 hover:border-zinc-300 transition-all dark:bg-zinc-950 dark:border-zinc-850"
+              className="bg-[#141417] border border-white/[0.08] hover:border-white/[0.14] rounded-2xl p-4 transition-all duration-200 shadow-sm cursor-pointer group"
             >
-              <img 
-                src={currentUser.avatar} 
-                alt={currentUser.name} 
-                className="w-9 h-9 rounded-full object-cover"
-              />
-              <div className="flex-1 text-zinc-400 text-xs font-medium bg-zinc-50 dark:bg-zinc-900/60 rounded-lg px-4 py-2 border border-zinc-100 dark:border-zinc-800">
-                Write a thought, question, or win...
+              {/* Top row: Avatar + sleek input placeholder */}
+              <div className="flex items-center gap-3">
+                <img 
+                  src={currentUser.avatar} 
+                  alt={currentUser.name} 
+                  className="w-9 h-9 rounded-full object-cover ring-1 ring-white/10 group-hover:ring-white/20 transition-all"
+                />
+                <div className="flex-1 text-zinc-400 text-sm font-normal bg-zinc-900/60 rounded-xl px-4 py-2.5 border border-white/[0.06] group-hover:border-white/[0.10] transition-colors">
+                  Write a thought, share a win, or ask a question...
+                </div>
               </div>
-            </button>
+
+              {/* Bottom row divider with utility badges & primary create post action */}
+              <div className="border-t border-white/[0.06] pt-3 mt-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenCreateBox(selectedCategory !== 'All' ? selectedCategory : 'Discussions');
+                    }}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04] transition-colors cursor-pointer"
+                  >
+                    <ImageIcon className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Image</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenCreateBox('Help Wanted');
+                    }}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04] transition-colors cursor-pointer"
+                  >
+                    <Lightbulb className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Question</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenCreateBox('Wins & Demos');
+                    }}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04] transition-colors cursor-pointer"
+                  >
+                    <Award className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Win</span>
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenCreateBox();
+                  }}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-3.5 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-sm shadow-indigo-500/20 active:bg-indigo-700 transition-all cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Create Post</span>
+                </button>
+              </div>
+            </div>
           ) : (
             <motion.form 
               id="post-composer-form"
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               onSubmit={handleSubmitPost}
-              className="bg-white rounded-xl border border-zinc-200/80 p-5 shadow-md space-y-4 dark:bg-zinc-950 dark:border-zinc-850 scroll-mt-24"
+              className="bg-[#141417] rounded-2xl border border-white/[0.08] p-5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_8px_24px_-4px_rgba(0,0,0,0.5)] space-y-4 scroll-mt-24"
             >
-              <div className="flex items-center justify-between border-b border-zinc-100 pb-2 dark:border-zinc-800">
-                <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">New Publication</span>
+              <div className="flex items-center justify-between border-b border-white/[0.06] pb-2.5">
+                <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">New Publication</span>
                 <button 
                   type="button" 
                   onClick={() => setShowCreateBox(false)}
-                  className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer"
+                  className="text-xs text-zinc-400 hover:text-zinc-200 cursor-pointer transition-colors"
                 >
                   Close
                 </button>
@@ -374,7 +432,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
                   placeholder="Post title..."
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="w-full text-base font-bold bg-transparent focus:outline-none dark:text-zinc-100"
+                  className="w-full text-base font-semibold bg-transparent focus:outline-none text-zinc-100 placeholder:text-zinc-500"
                 />
                 
                 <textarea 
@@ -515,7 +573,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
                   type="submit"
                   onClick={handleSubmitPost}
                   aria-busy={isSubmitting}
-                  className={`bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs px-4 py-2 rounded-lg transition-all dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 flex items-center gap-1.5 ${
+                  className={`bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-semibold text-xs px-4 py-2 rounded-xl shadow-sm shadow-indigo-500/20 transition-all flex items-center gap-1.5 ${
                     isSubmitting ? 'opacity-70 cursor-wait' : 'cursor-pointer'
                   }`}
                 >
@@ -527,32 +585,32 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
           )}
 
           {/* Search bar & Sorting bar */}
-          <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-xl border border-zinc-200/80 shadow-sm dark:bg-zinc-950 dark:border-zinc-850">
+          <div className="flex items-center justify-between gap-3 bg-[#141417] p-3 rounded-2xl border border-white/[0.08] shadow-sm">
             <div className="relative flex-1 max-w-xs">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
               <input 
                 type="text"
                 placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full text-xs pl-8 pr-3 py-1.5 bg-zinc-50 border border-zinc-100 rounded-lg focus:outline-none dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-200"
+                className="w-full text-xs pl-8 pr-3 py-1.5 bg-zinc-900/70 border border-white/[0.06] rounded-xl focus:outline-none text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-500/40"
               />
             </div>
 
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 bg-zinc-900/60 p-0.5 rounded-xl border border-white/[0.06]">
                 <button
                   onClick={() => setSortBy('activity')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                    sortBy === 'activity' ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50' : 'text-zinc-400 hover:text-zinc-600'
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    sortBy === 'activity' ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30' : 'text-zinc-400 hover:text-zinc-200 border border-transparent'
                   }`}
                 >
                   Trending
                 </button>
                 <button
                   onClick={() => setSortBy('newest')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                    sortBy === 'newest' ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50' : 'text-zinc-400 hover:text-zinc-600'
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    sortBy === 'newest' ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30' : 'text-zinc-400 hover:text-zinc-200 border border-transparent'
                   }`}
                 >
                   New
@@ -562,7 +620,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
               <button
                 type="button"
                 onClick={() => handleOpenCreateBox()}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-sm transition cursor-pointer shrink-0"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 rounded-lg shadow-sm shadow-indigo-500/20 transition cursor-pointer shrink-0"
                 aria-label="Create a new post"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -576,46 +634,46 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
             {isLoadingPosts ? (
               <div className="space-y-4 my-6">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className="p-5 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-white dark:bg-zinc-900/30 animate-pulse">
+                  <div key={i} className="bg-[#151518] border border-white/[0.06] rounded-2xl p-5 animate-pulse">
                     <div className="flex items-center gap-3 mb-4">
-                      <div className="w-10 h-10 rounded-full bg-zinc-200 dark:bg-zinc-800" />
+                      <div className="w-10 h-10 rounded-full bg-zinc-800/80" />
                       <div className="space-y-2 flex-1">
-                        <div className="w-32 h-3.5 bg-zinc-200 dark:bg-zinc-800 rounded" />
-                        <div className="w-48 h-2.5 bg-zinc-200/60 dark:bg-zinc-800/60 rounded" />
+                        <div className="w-32 h-3.5 bg-zinc-800/80 rounded-md" />
+                        <div className="w-48 h-2.5 bg-zinc-800/80 rounded-md" />
                       </div>
                     </div>
-                    <div className="w-3/4 h-4 bg-zinc-200 dark:bg-zinc-800 rounded mb-2.5" />
-                    <div className="w-full h-3 bg-zinc-200/60 dark:bg-zinc-800/60 rounded mb-2" />
-                    <div className="w-2/3 h-3 bg-zinc-200/60 dark:bg-zinc-800/60 rounded" />
+                    <div className="w-3/4 h-4 bg-zinc-800/80 rounded-md mb-2.5" />
+                    <div className="w-full h-3 bg-zinc-800/80 rounded-md mb-2" />
+                    <div className="w-2/3 h-3 bg-zinc-800/80 rounded-md" />
                   </div>
                 ))}
               </div>
             ) : filteredPosts.length === 0 ? (
-              <div className="flex flex-col items-center justify-center p-12 text-center border border-zinc-200 dark:border-zinc-800 rounded-xl bg-white dark:bg-zinc-950/40 my-6 shadow-sm" id="feed-empty">
-                <div className="p-3 bg-zinc-100 dark:bg-zinc-900 rounded-full mb-3 text-zinc-400">
-                  <MessageSquare className="w-6 h-6" />
+              <div className="bg-[#131316] border border-dashed border-white/[0.1] rounded-2xl p-10 text-center my-6" id="feed-empty">
+                <div className="w-12 h-12 rounded-2xl bg-zinc-800/60 border border-white/[0.08] flex items-center justify-center mx-auto text-indigo-400 mb-3.5">
+                  <MessageSquare className="w-6 h-6 text-indigo-400" />
                 </div>
-                <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-200">
+                <h3 className="text-base font-semibold text-zinc-100">
                   {selectedCategory === 'All'
                     ? 'This feed is silent'
                     : `No ${selectedCategory.toLowerCase()} yet`}
                 </h3>
-                <p className="text-sm text-zinc-500 max-w-sm mt-1 mb-4">
+                <p className="text-sm text-zinc-400 max-w-sm mx-auto mt-1 mb-4 font-normal">
                   {selectedCategory === 'All'
                     ? 'Be the first to share an announcement, ask a question, or post a win!'
                     : `There are no posts under "${selectedCategory}" in this community yet.`}
                 </p>
                 {selectedCategory !== 'All' ? (
-                  <div className="flex gap-2.5 mt-4">
+                  <div className="flex justify-center gap-2.5 mt-4">
                     <button
                       onClick={() => onSelectCategory('All')}
-                      className="px-4 py-2 text-xs font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition cursor-pointer"
+                      className="px-4 py-2 text-xs font-medium text-zinc-300 bg-zinc-800/90 hover:bg-zinc-700/90 border border-white/[0.08] rounded-xl transition cursor-pointer"
                     >
                       Clear filter
                     </button>
                     <button
                       onClick={() => handleOpenCreateBox(selectedCategory)}
-                      className="px-4 py-2 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition cursor-pointer"
+                      className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 rounded-xl shadow-sm shadow-indigo-500/20 transition cursor-pointer"
                     >
                       + Post in {selectedCategory}
                     </button>
@@ -623,7 +681,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
                 ) : (
                   <button
                     onClick={() => handleOpenCreateBox()}
-                    className="mt-4 px-4 py-2 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition cursor-pointer"
+                    className="mt-4 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 rounded-xl shadow-sm shadow-indigo-500/20 transition cursor-pointer"
                   >
                     + Publish First Post
                   </button>
@@ -632,36 +690,41 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
             ) : (
               <AnimatePresence mode="popLayout">
                 {filteredPosts.map((post) => (
-                  <motion.div
+                  <motion.article
                     key={post.id}
                     layoutId={`post-${post.id}`}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.98 }}
-                    className="bg-white rounded-xl border border-zinc-200/80 p-5 shadow-sm hover:border-zinc-300 transition-all dark:bg-zinc-950 dark:border-zinc-850"
+                    className="group relative bg-[#151518] hover:bg-[#18181C] border border-white/[0.08] hover:border-white/[0.14] rounded-2xl p-5 transition-all duration-200 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04),0_8px_20px_-6px_rgba(0,0,0,0.4)]"
                   >
                     {/* Card Header */}
                     <div className="flex items-start justify-between gap-3">
                       <div 
                         onClick={() => onSelectUser && onSelectUser(post.author)}
-                        className="flex items-center gap-3 cursor-pointer group"
+                        className="flex items-center gap-3 cursor-pointer group/author"
                       >
                         <img 
                           src={post.author.avatar} 
                           alt={post.author.name} 
-                          className="w-9 h-9 rounded-full object-cover group-hover:ring-2 group-hover:ring-indigo-500/40 transition-all"
+                          className="w-9 h-9 rounded-full object-cover ring-1 ring-white/10 group-hover/author:ring-indigo-500/50 transition-all"
                         />
                         <div>
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{post.author.name}</span>
-                            <span className="text-[10px] font-bold bg-zinc-50 text-zinc-500 px-1.5 py-0.2 rounded dark:bg-zinc-900 dark:text-zinc-400">{post.author.cohort}</span>
+                            <span className="font-semibold text-zinc-100 text-sm hover:underline cursor-pointer transition-colors">{post.author.name}</span>
+                            {post.author.cohort && (
+                              <span className="text-[10px] font-medium bg-zinc-800/80 text-zinc-400 px-1.5 py-0.5 rounded border border-white/[0.04]">{post.author.cohort}</span>
+                            )}
                           </div>
-                          <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 mt-0.5">
+                          <div className="flex items-center gap-2 text-xs text-zinc-400 mt-0.5">
                             <span>{post.timestamp}</span>
-                            <span>•</span>
-                            <span className="font-bold text-zinc-500">{post.category}</span>
+                            <span className="text-zinc-600">·</span>
+                            <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-zinc-800/80 text-zinc-300 border border-white/[0.06]">{post.category}</span>
                             {post.isNewsletter && (
-                              <span className="text-rose-500 font-bold bg-rose-50 px-1 py-0.1 rounded dark:bg-rose-950/20">Broadcast</span>
+                              <>
+                                <span className="text-zinc-600">·</span>
+                                <span className="text-indigo-400 font-semibold bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.2 rounded text-[10px]">Broadcast</span>
+                              </>
                             )}
                           </div>
                         </div>
@@ -669,26 +732,26 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
 
                       <button 
                         onClick={() => onToggleBookmark(post.id)}
-                        className={`p-1 rounded-lg transition-colors ${
-                          post.isBookmarked ? 'text-amber-500' : 'text-zinc-400 hover:text-zinc-600'
+                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                          post.isBookmarked ? 'text-amber-400 bg-amber-400/10' : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.05]'
                         }`}
                       >
-                        <Bookmark className={`h-4 w-4 ${post.isBookmarked ? 'fill-amber-500' : ''}`} />
+                        <Bookmark className={`h-4 w-4 ${post.isBookmarked ? 'fill-amber-400' : ''}`} />
                       </button>
                     </div>
 
                     {/* Card Body */}
-                    <div className="mt-3">
-                      <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50 leading-snug">{post.title}</h3>
-                      <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1.5 leading-relaxed whitespace-pre-wrap">{post.content}</p>
+                    <div className="mt-2.5">
+                      <h3 className="text-base font-semibold text-zinc-100 tracking-tight mt-2.5 mb-1.5 leading-snug">{post.title}</h3>
+                      <p className="text-sm text-zinc-300/90 leading-relaxed break-words whitespace-pre-wrap">{post.content}</p>
 
                       {post.mediaUrl && (
-                        <div className="mt-3 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-950/5 dark:bg-zinc-900/50 max-h-[480px] flex items-center justify-center">
+                        <div className="overflow-hidden rounded-xl border border-white/[0.08] mt-3.5 bg-black/40 max-h-[480px] flex items-center justify-center">
                           <img 
                             src={post.mediaUrl} 
                             alt={post.title} 
                             loading="lazy"
-                            className="w-full h-auto max-h-[480px] object-contain rounded-lg"
+                            className="w-full max-h-[480px] object-cover transition-transform duration-300 group-hover:scale-[1.01]"
                             onError={(e) => {
                               // Hide broken image icons silently (e.g. expired base64 or 400 storage URLs)
                               (e.target as HTMLImageElement).style.display = 'none';
@@ -698,7 +761,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
                       )}
 
                       {post.codeSnippet && (
-                        <div className="mt-3 rounded-lg overflow-hidden border border-zinc-850 bg-zinc-950 p-3">
+                        <div className="mt-3.5 rounded-xl overflow-hidden border border-white/[0.08] bg-[#0C0C0E] p-3.5">
                           <pre className="font-mono text-[11px] text-emerald-400 overflow-x-auto">
                             <code>{post.codeSnippet}</code>
                           </pre>
@@ -706,26 +769,26 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
                       )}
                     </div>
 
-                    {/* Action Panel */}
-                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-900">
+                    {/* Action Panel / Engagement Bar */}
+                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/[0.06]">
                       <div className="flex items-center gap-2">
                         <button 
                           onClick={() => onUpvotePost(post.id)}
-                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                             post.hasUpvoted
-                              ? 'bg-indigo-50 text-indigo-600 border border-indigo-100 dark:bg-zinc-900 dark:border-indigo-850 dark:text-indigo-400'
-                              : 'bg-zinc-50 text-zinc-500 hover:bg-zinc-100 dark:bg-zinc-900/40 dark:text-zinc-400'
+                              ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30'
+                              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70 border border-transparent hover:border-white/[0.06]'
                           }`}
                         >
-                          <ThumbsUp className="h-3 w-3" />
+                          <ThumbsUp className="h-3.5 w-3.5" />
                           <span>{post.upvotes}</span>
                         </button>
 
                         <button 
                           onClick={() => setActivePostForComments(post)}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70 border border-transparent hover:border-white/[0.06] transition-all cursor-pointer"
                         >
-                          <MessageSquare className="h-3 w-3" />
+                          <MessageSquare className="h-3.5 w-3.5" />
                           <span>{post.comments.length}</span>
                         </button>
                       </div>
@@ -733,14 +796,14 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
                       {onOpenNewsletterComposeWithContent && (
                         <button 
                           onClick={() => onOpenNewsletterComposeWithContent(post.title, post.content)}
-                          className="text-[10px] font-bold text-zinc-400 hover:text-zinc-600 flex items-center gap-1"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:bg-indigo-500/10 hover:text-indigo-300 hover:border-indigo-500/20 border border-transparent transition-all cursor-pointer"
                         >
-                          <Share2 className="h-3 w-3" />
+                          <Share2 className="h-3.5 w-3.5" />
                           <span>Curate</span>
                         </button>
                       )}
                     </div>
-                  </motion.div>
+                  </motion.article>
                 ))}
               </AnimatePresence>
             )}
@@ -749,41 +812,42 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
         </div>
 
         {/* Compact Right Sidebar - About Community, Member info & Mini Leaderboard */}
+        {/* Compact Right Sidebar - About Community, Member info & Mini Leaderboard */}
         <div className="hidden lg:block lg:col-span-4 space-y-4 sticky top-24">
           
           {/* About Hub Card */}
-          <div className="bg-white rounded-xl border border-zinc-200/80 p-4 shadow-sm dark:bg-zinc-950 dark:border-zinc-850">
-            <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-              <Info className="h-4 w-4" />
+          <div className="bg-[#141417] rounded-2xl border border-white/[0.08] p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
+            <h4 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+              <Info className="h-4 w-4 text-indigo-400" />
               About Hub
             </h4>
-            <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
+            <p className="text-xs text-zinc-400 font-normal leading-relaxed">
               {activeCommunity.description}
             </p>
             
-            <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-900 space-y-2">
+            <div className="mt-4 pt-3 border-t border-white/[0.06] space-y-2">
               <div className="flex justify-between items-center text-xs">
-                <span className="text-zinc-400">Privacy</span>
-                <span className="font-semibold text-zinc-700 dark:text-zinc-200 capitalize flex items-center gap-1">
-                  {activeCommunity.privacy === 'public' ? <Globe className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                <span className="text-zinc-500">Privacy</span>
+                <span className="font-medium text-zinc-300 capitalize flex items-center gap-1">
+                  {activeCommunity.privacy === 'public' ? <Globe className="h-3.5 w-3.5 text-zinc-400" /> : <Lock className="h-3.5 w-3.5 text-zinc-400" />}
                   {activeCommunity.privacy}
                 </span>
               </div>
               <div className="flex justify-between items-center text-xs">
-                <span className="text-zinc-400">Members</span>
-                <span className="font-semibold text-zinc-700 dark:text-zinc-200">{activeCommunity.memberCount} active</span>
+                <span className="text-zinc-500">Members</span>
+                <span className="font-medium text-zinc-300">{activeCommunity.memberCount} active</span>
               </div>
             </div>
           </div>
 
           {/* Compact Mini Leaderboard (Top 3 contributors only) */}
-          <div className="bg-white rounded-xl border border-zinc-200/80 p-4 shadow-sm dark:bg-zinc-950 dark:border-zinc-850">
+          <div className="bg-[#141417] rounded-2xl border border-white/[0.08] p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
             <div className="flex items-center justify-between mb-2.5">
-              <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Trophy className="h-4 w-4 text-amber-500" />
+              <h4 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Trophy className="h-4 w-4 text-amber-400" />
                 Contributors
               </h4>
-              <span className="text-[10px] font-bold text-zinc-400 font-mono">7 Days</span>
+              <span className="text-[10px] font-semibold text-zinc-500 font-mono">7 Days</span>
             </div>
 
             <div className="space-y-2.5">
@@ -791,14 +855,14 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
                 <div 
                   key={user.id} 
                   onClick={() => onSelectUser && onSelectUser(user)}
-                  className="flex items-center justify-between cursor-pointer p-1 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors group"
+                  className="flex items-center justify-between cursor-pointer p-1.5 rounded-xl hover:bg-white/[0.04] transition-colors group"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-xs font-bold text-zinc-400 w-3">#{idx + 1}</span>
-                    <img src={user.avatar} alt={user.name} className="w-6.5 h-6.5 rounded-full object-cover group-hover:ring-1 group-hover:ring-indigo-500/50" />
-                    <span className="text-xs font-bold text-zinc-700 truncate dark:text-zinc-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{user.name}</span>
+                    <span className="text-xs font-semibold text-zinc-500 w-3">#{idx + 1}</span>
+                    <img src={user.avatar} alt={user.name} className="w-6.5 h-6.5 rounded-full object-cover ring-1 ring-white/10 group-hover:ring-indigo-500/50" />
+                    <span className="text-xs font-medium text-zinc-300 truncate group-hover:text-indigo-400 transition-colors">{user.name}</span>
                   </div>
-                  <span className="text-xs font-bold text-zinc-500 font-mono">{user.points}p</span>
+                  <span className="text-xs font-medium text-zinc-400 font-mono">{user.points}p</span>
                 </div>
               ))}
             </div>
@@ -814,45 +878,45 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
           <>
             <motion.div 
               initial={{ opacity: 0 }}
-              animate={{ opacity: 0.4 }}
+              animate={{ opacity: 0.6 }}
               exit={{ opacity: 0 }}
               onClick={() => setActivePostForComments(null)}
-              className="fixed inset-0 bg-black z-40"
+              className="fixed inset-0 bg-black/80 backdrop-blur-xs z-40"
             />
             <motion.div 
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 24, stiffness: 220 }}
-              className="fixed top-0 right-0 bottom-0 w-full sm:w-[460px] bg-white z-50 shadow-2xl flex flex-col dark:bg-zinc-950"
+              className="fixed top-0 right-0 bottom-0 w-full sm:w-[460px] bg-[#121215] border-l border-white/[0.08] z-50 shadow-2xl flex flex-col"
             >
               {/* Drawer Header */}
-              <div className="p-4 border-b border-zinc-100 dark:border-zinc-850 flex items-center justify-between">
+              <div className="p-4 border-b border-white/[0.08] flex items-center justify-between bg-[#121215]">
                 <div>
-                  <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Comments Thread</h4>
-                  <p className="text-[10px] text-zinc-400">{activePostForComments.comments.length} replies</p>
+                  <h4 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Comments Thread</h4>
+                  <p className="text-[10px] text-zinc-500">{activePostForComments.comments.length} replies</p>
                 </div>
                 <button 
                   onClick={() => setActivePostForComments(null)}
-                  className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                  className="text-xs font-medium text-zinc-400 hover:text-zinc-200 cursor-pointer transition-colors"
                 >
                   Close
                 </button>
               </div>
 
               {/* Original Post Summary sticky */}
-              <div className="p-4 bg-zinc-50/50 border-b border-zinc-100 dark:bg-zinc-900/10 dark:border-zinc-850">
-                <span className="text-[9px] font-bold bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded dark:bg-zinc-800 dark:text-zinc-400">{activePostForComments.category}</span>
-                <h4 className="text-xs font-bold text-zinc-900 mt-1 dark:text-zinc-100 line-clamp-1">{activePostForComments.title}</h4>
-                <p className="text-[11px] text-zinc-500 mt-0.5 line-clamp-2 leading-relaxed dark:text-zinc-400">{activePostForComments.content}</p>
+              <div className="p-4 bg-zinc-900/40 border-b border-white/[0.06]">
+                <span className="text-[10px] font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full">{activePostForComments.category}</span>
+                <h4 className="text-xs font-semibold text-zinc-100 mt-2 line-clamp-1">{activePostForComments.title}</h4>
+                <p className="text-xs text-zinc-400 mt-1 line-clamp-2 leading-relaxed font-normal">{activePostForComments.content}</p>
               </div>
 
               {/* Comments Scroller */}
               <div className="flex-1 overflow-y-auto p-4 space-y-3.5">
                 {activePostForComments.comments.length === 0 ? (
-                  <div className="text-center py-12 text-zinc-400">
-                    <MessageSquare className="h-6 w-6 mx-auto mb-2 text-zinc-300" />
-                    <p className="text-xs">No comments yet. Start the conversation!</p>
+                  <div className="text-center py-12 text-zinc-500">
+                    <MessageSquare className="h-6 w-6 mx-auto mb-2 text-zinc-600" />
+                    <p className="text-xs font-normal">No comments yet. Start the conversation!</p>
                   </div>
                 ) : (
                   activePostForComments.comments.map((comment) => (
@@ -861,19 +925,19 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
                         src={comment.author.avatar} 
                         alt={comment.author.name} 
                         onClick={() => onSelectUser && onSelectUser(comment.author)}
-                        className="w-7.5 h-7.5 rounded-full object-cover cursor-pointer hover:ring-2 hover:ring-indigo-500/40 transition-all"
+                        className="w-7.5 h-7.5 rounded-full object-cover ring-1 ring-white/10 cursor-pointer hover:ring-2 hover:ring-indigo-500/40 transition-all"
                       />
-                      <div className="flex-1 bg-zinc-50 dark:bg-zinc-900 rounded-xl p-3">
+                      <div className="flex-1 bg-[#151518] border border-white/[0.06] rounded-xl p-3">
                         <div className="flex items-center justify-between">
                           <span 
                             onClick={() => onSelectUser && onSelectUser(comment.author)}
-                            className="text-xs font-bold text-zinc-800 dark:text-zinc-200 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                            className="text-xs font-medium text-zinc-200 cursor-pointer hover:text-indigo-400 transition-colors"
                           >
                             {comment.author.name}
                           </span>
-                          <span className="text-[9px] text-zinc-400">{comment.timestamp}</span>
+                          <span className="text-[9px] text-zinc-500">{comment.timestamp}</span>
                         </div>
-                        <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1.5 leading-relaxed">{comment.content}</p>
+                        <p className="text-xs text-zinc-400 font-normal mt-1.5 leading-relaxed">{comment.content}</p>
                       </div>
                     </div>
                   ))
@@ -881,7 +945,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
               </div>
 
               {/* Form Input footer */}
-              <div className="p-4 border-t border-zinc-100 bg-white dark:bg-zinc-950 dark:border-zinc-850">
+              <div className="p-4 border-t border-white/[0.08] bg-[#121215]">
                 <div className="flex gap-2">
                   <input 
                     type="text" 
@@ -893,15 +957,15 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleSubmitComment(activePostForComments.id);
                     }}
-                    className="flex-1 text-xs px-3 py-2 bg-zinc-50 border border-zinc-100 rounded-lg focus:outline-none dark:bg-zinc-900 dark:border-zinc-850 dark:text-zinc-200 disabled:opacity-60"
+                    className="flex-1 text-xs px-3 py-2 bg-zinc-900/80 border border-white/[0.08] rounded-xl focus:outline-none text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-500/40 disabled:opacity-60"
                   />
                   <button 
                     disabled={isSubmittingComment || !newCommentText.trim()}
                     onClick={() => handleSubmitComment(activePostForComments.id)}
-                    className="bg-zinc-900 hover:bg-zinc-800 text-white p-2 rounded-lg dark:bg-zinc-100 dark:text-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-all"
+                    className="bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white p-2 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer shadow-sm shadow-indigo-500/20"
                   >
                     {isSubmittingComment ? (
-                      <Loader2 className="h-4.5 w-4.5 animate-spin text-zinc-400 dark:text-zinc-600" />
+                      <Loader2 className="h-4.5 w-4.5 animate-spin text-white" />
                     ) : (
                       <Send className="h-4.5 w-4.5" />
                     )}
@@ -917,7 +981,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
       <button
         type="button"
         onClick={() => handleOpenCreateBox()}
-        className="sm:hidden fixed bottom-20 right-4 z-40 p-3.5 rounded-full bg-indigo-600 text-white shadow-xl hover:bg-indigo-500 active:scale-95 transition-all cursor-pointer flex items-center justify-center"
+        className="sm:hidden fixed bottom-20 right-4 z-40 p-3.5 rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-500/30 hover:bg-indigo-500 active:scale-95 transition-all cursor-pointer flex items-center justify-center"
         aria-label="Create a new post"
       >
         <Plus className="w-5 h-5" />

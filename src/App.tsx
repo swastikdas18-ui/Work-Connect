@@ -1161,7 +1161,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
   const isAnyModalOpen = showCreateModal || showProfileModal || showSearchModal || showAuthModal || showInstallModal || !!inspectingUser;
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 flex flex-col font-sans select-none antialiased">
+    <div className="min-h-screen bg-[#09090B] text-zinc-100 flex flex-col font-sans select-none antialiased">
       
       {/* Outer wrapper to trap focus and prevent keyboard navigation behind modals */}
       <div 
@@ -1170,7 +1170,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
       >
 
       {/* Global Header Layout */}
-      <header className="sticky top-0 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md border-b border-zinc-200/60 dark:border-zinc-900/80 z-40 px-4 h-15 flex items-center shadow-xs">
+      <header className="sticky top-0 bg-[#121215]/85 backdrop-blur-xl border-b border-white/[0.08] z-40 px-4 h-15 flex items-center shadow-xs">
         <div className="max-w-7xl mx-auto w-full flex items-center justify-between gap-4">
           
           {/* Left Group: Back to Portal divider and Community Name / Workspace Badge */}
@@ -1178,7 +1178,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
             {viewMode === 'community' ? (
               <button 
                 onClick={handleBackToPortal}
-                className="flex items-center gap-1.5 text-xs font-bold text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200 px-3 py-2 min-h-[36px] rounded-xl transition-all dark:text-zinc-300 dark:hover:text-white dark:bg-zinc-900 dark:hover:bg-zinc-800 shadow-sm cursor-pointer"
+                className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300 hover:text-white bg-zinc-900/80 hover:bg-zinc-800 border border-white/[0.08] px-3 py-2 min-h-[36px] rounded-xl transition-all shadow-sm cursor-pointer"
                 id="back-to-portal-breadcrumb"
                 aria-label="Back to Portal"
                 title="Back to Portal"
@@ -1192,17 +1192,17 @@ function AppContent({ auth }: { auth: AuthContextType }) {
                 aria-label="Work Connect Home"
                 title="Work Connect Home"
               >
-                <div className="h-7 w-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-extrabold shadow-sm hover:scale-105 transition-transform">
+                <div className="h-7 w-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-extrabold shadow-sm shadow-indigo-500/30 hover:scale-105 transition-transform">
                   <span>W</span>
                 </div>
-                <span className="text-sm font-black tracking-tight text-zinc-950 dark:text-white hidden sm:block">Work Connect</span>
+                <span className="text-sm font-black tracking-tight text-white hidden sm:block">Work Connect</span>
               </button>
             )}
 
             {viewMode === 'community' && activeCommunity && (
               <>
-                <ChevronRight className="h-4 w-4 text-zinc-300 hidden md:block" />
-                <span className="text-xs font-extrabold text-zinc-900 dark:text-zinc-50 hidden md:block truncate max-w-[150px]">
+                <ChevronRight className="h-4 w-4 text-zinc-600 hidden md:block" />
+                <span className="text-xs font-semibold text-zinc-200 hidden md:block truncate max-w-[150px]">
                   {activeCommunity.name}
                 </span>
               </>
@@ -1211,13 +1211,13 @@ function AppContent({ auth }: { auth: AuthContextType }) {
 
           {/* Desktop Sub-Nav when INSIDE community */}
           {viewMode === 'community' && (
-            <nav className="hidden md:flex items-center gap-1 bg-zinc-100/60 p-0.5 rounded-lg border border-zinc-200/40 dark:bg-zinc-900/50 dark:border-zinc-800">
+            <nav className="hidden md:flex items-center gap-1 bg-zinc-900/60 p-0.5 rounded-xl border border-white/[0.06]">
               <button
                 onClick={() => setActiveTab('feed')}
-                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   activeTab === 'feed'
-                    ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-800 dark:text-zinc-50'
-                    : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+                    ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-semibold shadow-xs'
+                    : 'text-zinc-400 hover:text-zinc-200 border border-transparent'
                 }`}
               >
                 Feed
@@ -1225,10 +1225,10 @@ function AppContent({ auth }: { auth: AuthContextType }) {
 
               <button
                 onClick={() => setActiveTab('classroom')}
-                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   activeTab === 'classroom'
-                    ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-800 dark:text-zinc-50'
-                    : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+                    ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-semibold shadow-xs'
+                    : 'text-zinc-400 hover:text-zinc-200 border border-transparent'
                 }`}
               >
                 Classroom
@@ -1236,10 +1236,10 @@ function AppContent({ auth }: { auth: AuthContextType }) {
 
               <button
                 onClick={() => setActiveTab('events')}
-                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   activeTab === 'events'
-                    ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-800 dark:text-zinc-50'
-                    : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+                    ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-semibold shadow-xs'
+                    : 'text-zinc-400 hover:text-zinc-200 border border-transparent'
                 }`}
               >
                 Events
@@ -1247,10 +1247,10 @@ function AppContent({ auth }: { auth: AuthContextType }) {
 
               <button
                 onClick={() => setActiveTab('leaderboard')}
-                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   activeTab === 'leaderboard'
-                    ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-800 dark:text-zinc-50'
-                    : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+                    ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-semibold shadow-xs'
+                    : 'text-zinc-400 hover:text-zinc-200 border border-transparent'
                 }`}
               >
                 Leaderboard
@@ -1258,10 +1258,10 @@ function AppContent({ auth }: { auth: AuthContextType }) {
 
               <button
                 onClick={() => setActiveTab('newsletter')}
-                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   activeTab === 'newsletter'
-                    ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-800 dark:text-zinc-50'
-                    : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+                    ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-semibold shadow-xs'
+                    : 'text-zinc-400 hover:text-zinc-200 border border-transparent'
                 }`}
               >
                 Studio
@@ -1270,14 +1270,14 @@ function AppContent({ auth }: { auth: AuthContextType }) {
           )}
 
           {/* Right Group: Search, Notifications, Install, User Profile */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             
             {/* Search Trigger (⌘K) */}
             <button 
               onClick={() => setShowSearchModal(true)}
               aria-label="Search posts and members"
               title="Search posts and members"
-              className="flex items-center justify-center p-2 rounded-lg bg-zinc-50 border border-zinc-100 hover:bg-zinc-100 text-zinc-400 dark:bg-zinc-900 dark:border-zinc-800 dark:hover:bg-zinc-850 cursor-pointer"
+              className="flex items-center justify-center p-2 rounded-xl bg-zinc-900/80 border border-white/[0.08] hover:border-white/[0.14] text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
             >
               <Search className="h-4 w-4" />
             </button>
@@ -1289,11 +1289,11 @@ function AppContent({ auth }: { auth: AuthContextType }) {
                   onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
                   aria-label="View notifications"
                   title="View notifications"
-                  className="p-2 rounded-lg bg-zinc-50 border border-zinc-100 hover:bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:border-zinc-800 dark:hover:bg-zinc-850 relative cursor-pointer"
+                  className="p-2 rounded-xl bg-zinc-900/80 border border-white/[0.08] hover:border-white/[0.14] text-zinc-400 hover:text-zinc-200 relative transition-colors cursor-pointer"
                 >
                   <Bell className="h-4 w-4" />
                   {appNotifications.some(n => !n.read) && (
-                    <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-rose-500" />
+                    <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-indigo-500 ring-2 ring-[#121215]" />
                   )}
                 </button>
 
@@ -1305,31 +1305,31 @@ function AppContent({ auth }: { auth: AuthContextType }) {
                         initial={{ opacity: 0, y: 5 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 5 }}
-                        className="absolute right-0 mt-2 w-72 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-20 overflow-hidden"
+                        className="absolute right-0 mt-2 w-72 bg-[#141417] border border-white/[0.08] rounded-2xl shadow-xl z-20 overflow-hidden shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_8px_24px_-4px_rgba(0,0,0,0.5)]"
                       >
-                        <div className="p-3 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50/50 dark:bg-zinc-900/50">
-                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Alerts</span>
+                        <div className="p-3 border-b border-white/[0.06] flex justify-between items-center bg-zinc-900/40">
+                          <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Alerts</span>
                           <button 
                             onClick={() => {
                               setAppNotifications(prev => prev.map(n => ({ ...n, read: true })));
                               showToast('All notifications marked read.');
                             }}
-                            className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer"
+                            className="text-[10px] font-semibold text-indigo-400 hover:text-indigo-300 cursor-pointer"
                           >
                             Mark read
                           </button>
                         </div>
 
-                        <div className="max-h-64 overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800">
+                        <div className="max-h-64 overflow-y-auto divide-y divide-white/[0.04]">
                           {appNotifications.map((notif) => (
                             <div 
                               key={notif.id} 
                               className={`p-3 text-xs leading-normal ${
-                                notif.read ? 'bg-white dark:bg-zinc-900 text-zinc-500' : 'bg-indigo-50/10 dark:bg-zinc-900/40 text-zinc-800 dark:text-zinc-200 font-medium'
+                                notif.read ? 'bg-transparent text-zinc-400' : 'bg-indigo-500/5 text-zinc-200 font-medium'
                               }`}
                             >
                               <p>{notif.text}</p>
-                              <span className="text-[10px] text-zinc-400 mt-1 block font-mono">{notif.time}</span>
+                              <span className="text-[10px] text-zinc-500 mt-1 block font-mono">{notif.time}</span>
                             </div>
                           ))}
                         </div>
@@ -1344,9 +1344,9 @@ function AppContent({ auth }: { auth: AuthContextType }) {
             {viewMode === 'portal' && (
               <button 
                 onClick={handleCreateCommunityClick}
-                className="hidden md:flex items-center gap-1.5 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900 transition-all cursor-pointer"
+                className="hidden md:flex items-center gap-1.5 border border-white/[0.08] hover:border-white/[0.14] px-3 py-1.5 rounded-xl text-xs font-semibold text-zinc-300 hover:text-white bg-zinc-900/80 hover:bg-zinc-800 transition-all cursor-pointer"
               >
-                <Plus className="h-3.5 w-3.5 text-indigo-500" />
+                <Plus className="h-3.5 w-3.5 text-indigo-400" />
                 <span>Create Community</span>
               </button>
             )}
@@ -1356,7 +1356,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
               <button
                 id="pwa-install-btn"
                 onClick={handleInstallClick}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition shadow-xs cursor-pointer"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white shadow-sm shadow-indigo-500/20 transition cursor-pointer"
                 aria-label="Install Work Connect app"
                 title="Install Work Connect app"
               >
@@ -1394,34 +1394,34 @@ function AppContent({ auth }: { auth: AuthContextType }) {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
                       transition={{ duration: 0.15 }}
-                      className="absolute right-0 mt-2 w-72 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 overflow-hidden"
+                      className="absolute right-0 mt-2 w-72 bg-[#141417] border border-white/[0.08] rounded-2xl shadow-xl z-50 overflow-hidden shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_8px_24px_-4px_rgba(0,0,0,0.5)]"
                     >
                       {/* Header Section: Name & Headline, and Email */}
-                      <div className="p-4 border-b border-zinc-100 dark:border-zinc-850">
-                        <div className="font-bold text-zinc-900 dark:text-white text-sm truncate flex items-center gap-1.5">
+                      <div className="p-4 border-b border-white/[0.06] bg-zinc-900/40">
+                        <div className="font-semibold text-zinc-100 text-sm truncate flex items-center gap-1.5">
                           <span>{mappedCurrentUser.name}</span>
                           {mappedCurrentUser.cohort && (
                             <>
-                              <span className="text-zinc-400 font-normal">•</span>
-                              <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400 truncate">
+                              <span className="text-zinc-500 font-normal">•</span>
+                              <span className="text-xs font-normal text-zinc-400 truncate">
                                 {mappedCurrentUser.cohort}
                               </span>
                             </>
                           )}
                         </div>
-                        <div className="text-xs text-zinc-400 dark:text-zinc-500 truncate mt-1">
+                        <div className="text-xs text-zinc-500 truncate mt-1">
                           {session?.user?.email || (user as any)?.email || `${mappedCurrentUser.name.toLowerCase().replace(/\s+/g, '')}@company.com`}
                         </div>
                       </div>
 
                       {/* Quick Links Section */}
-                      <div className="p-1.5 space-y-0.5 border-b border-zinc-100 dark:border-zinc-850">
+                      <div className="p-1.5 space-y-0.5 border-b border-white/[0.06]">
                         <button
                           onClick={() => {
                             setIsProfileDropdownOpen(false);
                             openEditProfileModal();
                           }}
-                          className="w-full text-left px-3 py-2 text-xs font-semibold text-zinc-700 hover:text-zinc-900 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-zinc-900 rounded-lg transition-all"
+                          className="w-full text-left px-3 py-2 text-xs font-medium text-zinc-300 hover:text-white hover:bg-white/[0.04] rounded-xl transition-all cursor-pointer"
                         >
                           Profile Settings
                         </button>
@@ -1430,7 +1430,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
                             setIsProfileDropdownOpen(false);
                             backToPortal();
                           }}
-                          className="w-full text-left px-3 py-2 text-xs font-semibold text-zinc-700 hover:text-zinc-900 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-zinc-900 rounded-lg transition-all"
+                          className="w-full text-left px-3 py-2 text-xs font-medium text-zinc-300 hover:text-white hover:bg-white/[0.04] rounded-xl transition-all cursor-pointer"
                         >
                           Your Communities
                         </button>
@@ -1439,10 +1439,10 @@ function AppContent({ auth }: { auth: AuthContextType }) {
                             setIsProfileDropdownOpen(false);
                             setInspectingUser(mappedCurrentUser);
                           }}
-                          className="w-full text-left px-3 py-2 text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/40 rounded-lg transition-all flex items-center justify-between"
+                          className="w-full text-left px-3 py-2 text-xs font-medium text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 rounded-xl transition-all flex items-center justify-between cursor-pointer"
                         >
                           <span>View Public Profile</span>
-                          <span className="text-[10px] font-mono font-bold bg-indigo-100 dark:bg-indigo-900/60 px-1.5 py-0.5 rounded">Card</span>
+                          <span className="text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.5 rounded">Card</span>
                         </button>
                       </div>
 
@@ -1894,55 +1894,55 @@ function AppContent({ auth }: { auth: AuthContextType }) {
 
       {/* Mobile sub navigation bar (Inside a community only) */}
       {viewMode === 'community' && (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-zinc-200/80 z-30 dark:bg-zinc-900 dark:border-zinc-800 shadow-lg px-4 h-16 flex items-center justify-around">
+        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#121215]/90 backdrop-blur-xl border-t border-white/[0.08] z-30 shadow-2xl px-4 h-16 flex items-center justify-around">
           <button
             onClick={() => setActiveTab('feed')}
-            className={`flex flex-col items-center justify-center flex-1 h-full text-center ${
-              activeTab === 'feed' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-400'
+            className={`flex flex-col items-center justify-center flex-1 h-full text-center cursor-pointer transition-colors ${
+              activeTab === 'feed' ? 'text-indigo-400 font-semibold' : 'text-zinc-500 hover:text-zinc-300'
             }`}
           >
             <MessageSquare className="h-5 w-5" />
-            <span className="text-[10px] font-bold mt-1">Feed</span>
+            <span className="text-[10px] font-semibold mt-1">Feed</span>
           </button>
 
           <button
             onClick={() => setActiveTab('classroom')}
-            className={`flex flex-col items-center justify-center flex-1 h-full text-center ${
-              activeTab === 'classroom' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-400'
+            className={`flex flex-col items-center justify-center flex-1 h-full text-center cursor-pointer transition-colors ${
+              activeTab === 'classroom' ? 'text-indigo-400 font-semibold' : 'text-zinc-500 hover:text-zinc-300'
             }`}
           >
             <BookOpen className="h-5 w-5" />
-            <span className="text-[10px] font-bold mt-1">Classroom</span>
+            <span className="text-[10px] font-semibold mt-1">Classroom</span>
           </button>
 
           <button
             onClick={() => setActiveTab('events')}
-            className={`flex flex-col items-center justify-center flex-1 h-full text-center ${
-              activeTab === 'events' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-400'
+            className={`flex flex-col items-center justify-center flex-1 h-full text-center cursor-pointer transition-colors ${
+              activeTab === 'events' ? 'text-indigo-400 font-semibold' : 'text-zinc-500 hover:text-zinc-300'
             }`}
           >
             <Calendar className="h-5 w-5" />
-            <span className="text-[10px] font-bold mt-1">Events</span>
+            <span className="text-[10px] font-semibold mt-1">Events</span>
           </button>
 
           <button
             onClick={() => setActiveTab('leaderboard')}
-            className={`flex flex-col items-center justify-center flex-1 h-full text-center ${
-              activeTab === 'leaderboard' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-400'
+            className={`flex flex-col items-center justify-center flex-1 h-full text-center cursor-pointer transition-colors ${
+              activeTab === 'leaderboard' ? 'text-indigo-400 font-semibold' : 'text-zinc-500 hover:text-zinc-300'
             }`}
           >
             <Trophy className="h-5 w-5" />
-            <span className="text-[10px] font-bold mt-1">Leaderboard</span>
+            <span className="text-[10px] font-semibold mt-1">Leaderboard</span>
           </button>
 
           <button
             onClick={() => setActiveTab('newsletter')}
-            className={`flex flex-col items-center justify-center flex-1 h-full text-center ${
-              activeTab === 'newsletter' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-400'
+            className={`flex flex-col items-center justify-center flex-1 h-full text-center cursor-pointer transition-colors ${
+              activeTab === 'newsletter' ? 'text-indigo-400 font-semibold' : 'text-zinc-500 hover:text-zinc-300'
             }`}
           >
             <Inbox className="h-5 w-5" />
-            <span className="text-[10px] font-bold mt-1">Studio</span>
+            <span className="text-[10px] font-semibold mt-1">Studio</span>
           </button>
         </div>
       )}

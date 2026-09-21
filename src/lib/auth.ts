@@ -9,6 +9,7 @@ export interface AuthContextType {
   loading: boolean;
   isAdminOrOwner: boolean;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signUp: (email: string, password: string, fullName: string, headline: string, avatarUrl: string, role: 'owner' | 'admin' | 'member') => Promise<{ emailVerificationRequired: boolean; email?: string } | void>;
   signOut: () => Promise<void>;
   setRole: (role: 'owner' | 'admin' | 'member') => Promise<void>;
@@ -183,6 +184,41 @@ export function useAuth() {
     }
   };
 
+  const signInWithGoogle = async () => {
+    setLoading(true);
+    try {
+      if (isSupabaseConfigured) {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: window.location.origin,
+            queryParams: {
+              access_type: 'offline',
+              prompt: 'consent',
+            },
+          },
+        });
+        if (error) throw error;
+      } else {
+        // Fallback for offline sandbox mode
+        const mockGoogleUser: Profile = {
+          id: 'mock-u-google-user',
+          full_name: 'Google User',
+          avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80',
+          headline: 'Software Engineer',
+          cohort_tag: 'Interns Summer 2026',
+          karma_points: 50,
+          role: 'member',
+        };
+        await dbService.upsertProfile(mockGoogleUser);
+        setUser(mockGoogleUser);
+        localStorage.setItem(LOCAL_MOCK_USER_KEY, JSON.stringify(mockGoogleUser));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const signUp = async (
     email: string, 
     password: string, 
@@ -298,6 +334,7 @@ export function useAuth() {
     loading,
     isAdminOrOwner,
     signIn,
+    signInWithGoogle,
     signUp,
     signOut,
     setRole,

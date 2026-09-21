@@ -149,7 +149,7 @@ if (typeof window !== 'undefined') {
 }
 
 function AppContent({ auth }: { auth: AuthContextType }) {
-  const { user, session, loading: authLoading, signIn, signUp, signOut, setRole, updateProfile } = auth;
+  const { user, session, loading: authLoading, signIn, signInWithGoogle, signUp, signOut, setRole, updateProfile } = auth;
   const {
     communities,
     memberships,
@@ -1130,6 +1130,25 @@ function AppContent({ auth }: { auth: AuthContextType }) {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    try {
+      setAuthErrorMessage(null);
+      await signInWithGoogle();
+      if (!isSupabaseConfigured) {
+        showToast('Signed in with Google (Sandbox Demo)');
+        setShowAuthModal(false);
+        setAuthBannerMessage(null);
+        setAuthErrorMessage(null);
+        await resumeAuthIntent(authIntent);
+      }
+    } catch (err: any) {
+      console.error('Google sign-in error:', err);
+      const friendlyMsg = err?.message || 'Failed to sign in with Google';
+      setAuthErrorMessage(friendlyMsg);
+      showToast(friendlyMsg);
+    }
+  };
+
   const openEditProfileModal = () => {
     if (!user) return;
     setUpName(user.full_name || '');
@@ -2098,6 +2117,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
         suHeadline={suHeadline}
         setSuHeadline={setSuHeadline}
         handleAuthSubmit={handleAuthSubmit}
+        onGoogleSignIn={handleGoogleSignIn}
       />
 
       {/* PWA Install Instructions Fallback Modal */}

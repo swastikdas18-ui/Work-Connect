@@ -136,7 +136,7 @@ export const isValidUUID = (id: any): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id.trim());
 
 // Fallback empty local-storage mock DB so the app functions instantly if no credentials are added yet
-const getLocalData = <T>(key: string, defaultVal: T): T => {
+export const getLocalData = <T>(key: string, defaultVal: T): T => {
   try {
     const saved = localStorage.getItem(`wc_db_${key}`);
     return saved ? JSON.parse(saved) : defaultVal;
@@ -241,6 +241,25 @@ export const dbService = {
     );
   },
 
+  async deleteCommunity(communityId: string): Promise<void> {
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.rpc('delete_community', {
+        p_community_id: communityId,
+      });
+      if (error) throw error;
+      return;
+    }
+    // Fallback for local storage / test environment
+    const communities = getLocalData<Community[]>('communities', []);
+    setLocalData('communities', communities.filter(c => c.id !== communityId));
+
+    const memberships = getLocalData<Membership[]>('memberships', []);
+    setLocalData('memberships', memberships.filter(m => m.community_id !== communityId));
+
+    const posts = getLocalData<Post[]>('posts', []);
+    setLocalData('posts', posts.filter(p => p.community_id !== communityId));
+  },
+
   // Memberships
   async getMemberships(userId: string): Promise<Membership[]> {
     if (!isValidUUID(userId)) {
@@ -339,6 +358,25 @@ export const dbService = {
         }
       }
     );
+  },
+
+  async updateMembershipRole(communityId: string, targetUserId: string, newRole: 'admin' | 'member'): Promise<void> {
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.rpc('update_member_role', {
+        p_community_id: communityId,
+        p_target_user_id: targetUserId,
+        p_new_role: newRole,
+      });
+      if (error) throw error;
+      return;
+    }
+    // Fallback for local storage / test environment
+    const memberships = getLocalData<Membership[]>('memberships', []);
+    const idx = memberships.findIndex(m => m.community_id === communityId && m.user_id === targetUserId);
+    if (idx >= 0) {
+      memberships[idx].role = newRole;
+      setLocalData('memberships', memberships);
+    }
   },
 
   // Posts
@@ -945,32 +983,36 @@ export interface Contributor {
 export async function fetchCommunityContributors(communityId: string): Promise<Contributor[]> {
   if (!communityId) return [];
 
-  // Call dynamic RPC
-  const { data, error } = await supabase.rpc('get_community_contributors', {
-    p_community_id: communityId,
-    p_limit: 5,
-  });
+  // Call dynamic RPC with graceful 404/not-found fallback
+  try {
+    const { data, error } = await supabase.rpc('get_community_contributors', {
+      p_community_id: communityId,
+      p_limit: 5,
+    });
 
-  if (!error && data && data.length > 0) {
-    return data.map((item: any) => ({
-      user_id: item.user_id,
-      full_name: item.full_name || 'Member',
-      avatar_url: item.avatar_url || null,
-      points: Number(item.points) || 0,
-      rank: Number(item.rank) || 1,
-    }));
+    if (!error && data && data.length > 0) {
+      return data.map((item: any) => ({
+        user_id: item.user_id,
+        full_name: item.full_name || 'Member',
+        avatar_url: item.avatar_url || null,
+        points: Number(item.points) || 0,
+        rank: Number(item.rank) || 1,
+      }));
+    }
+  } catch {
+    // Gracefully handle RPC 404 or missing function error and continue to fallback
   }
 
-  // Client-side fallback if RPC is not yet applied:
-  // Derive contributors from active posts and community memberships
+  // Client-side fallback if RPC is not yet applied or returned 404:
+  // Derive contributors from active community memberships and profiles
   try {
-    const { data: members } = await supabase
+    const { data: members, error: membersError } = await supabase
       .from('memberships')
       .select('user_id, role, profiles(id, full_name, avatar_url)')
       .eq('community_id', communityId)
       .limit(5);
 
-    if (members && members.length > 0) {
+    if (!membersError && members && members.length > 0) {
       return members.map((m: any, idx: number) => ({
         user_id: m.user_id,
         full_name: m.profiles?.full_name || 'Community Member',
@@ -979,8 +1021,8 @@ export async function fetchCommunityContributors(communityId: string): Promise<C
         rank: idx + 1,
       }));
     }
-  } catch (e) {
-    console.warn('Fallback contributor fetch failed', e);
+  } catch {
+    // Silently proceed to local data fallback
   }
 
   // Fallback for local storage / test environment

@@ -29,11 +29,13 @@ import {
   AlertCircle,
   Lightbulb,
   Award,
-  Users
+  Users,
+  Settings
 } from 'lucide-react';
 import { Post, User, CalendarEvent, Community } from '../types';
 import { compressImage, fileToDataUrl, formatFileSize } from '../utils/imageCompressor';
 import { fetchCommunityContributors, Contributor } from '../lib/supabase';
+import { CommunitySettingsModal } from './CommunitySettingsModal';
 
 interface CommunityTabProps {
   activeCommunity: Community;
@@ -53,6 +55,8 @@ interface CommunityTabProps {
   isLoadingPosts?: boolean;
   isAdminOrOwner?: boolean;
   isAdminOrCreator?: boolean;
+  onCommunityDeleted?: () => void;
+  onOpenSettings?: () => void;
 }
 
 export const CommunityTab: React.FC<CommunityTabProps> = ({
@@ -72,17 +76,24 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
   showToast,
   isLoadingPosts = false,
   isAdminOrOwner = false,
-  isAdminOrCreator = false
+  isAdminOrCreator = false,
+  onCommunityDeleted,
+  onOpenSettings
 }) => {
+  const isCreator = Boolean(
+    activeCommunity && currentUser && (
+      activeCommunity.created_by === currentUser.id ||
+      activeCommunity.createdBy === currentUser.id
+    )
+  );
+
   const isUserAdminOrCreator = Boolean(
     isAdminOrCreator ||
     isAdminOrOwner ||
-    (activeCommunity && currentUser && (
-      activeCommunity.created_by === currentUser.id ||
-      activeCommunity.createdBy === currentUser.id
-    ))
+    isCreator
   );
 
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [sortBy, setSortBy] = useState<'activity' | 'newest' | 'top'>('activity');
   const [showCreateBox, setShowCreateBox] = useState(false);
   const [title, setTitle] = useState('');
@@ -688,20 +699,40 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
                     : `There are no posts under "${selectedCategory}" in this community yet.`}
                 </p>
                 {selectedCategory !== 'All' ? (
-                  <div className="flex justify-center gap-2.5 mt-4">
-                    <button
-                      onClick={() => onSelectCategory('All')}
-                      className="px-4 py-2 text-xs font-medium text-zinc-300 bg-zinc-800/90 hover:bg-zinc-700/90 border border-white/[0.08] rounded-xl transition cursor-pointer"
-                    >
-                      Clear filter
-                    </button>
-                    <button
-                      onClick={() => handleOpenCreateBox(selectedCategory)}
-                      className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 rounded-xl shadow-sm shadow-indigo-500/20 transition cursor-pointer"
-                    >
-                      + Post in {selectedCategory}
-                    </button>
-                  </div>
+                  selectedCategory === 'Announcements' && !isUserAdminOrCreator ? (
+                    <div className="flex justify-center gap-2.5 mt-4">
+                      <button
+                        onClick={() => onSelectCategory('All')}
+                        className="px-4 py-2 text-xs font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition cursor-pointer"
+                      >
+                        Clear filter
+                      </button>
+                      <button
+                        onClick={() => {
+                          onSelectCategory('Help Wanted');
+                          handleOpenCreateBox('Help Wanted');
+                        }}
+                        className="px-4 py-2 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition cursor-pointer"
+                      >
+                        Ask in Help Wanted
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex justify-center gap-2.5 mt-4">
+                      <button
+                        onClick={() => onSelectCategory('All')}
+                        className="px-4 py-2 text-xs font-medium text-zinc-300 bg-zinc-800/90 hover:bg-zinc-700/90 border border-white/[0.08] rounded-xl transition cursor-pointer"
+                      >
+                        Clear filter
+                      </button>
+                      <button
+                        onClick={() => handleOpenCreateBox(selectedCategory)}
+                        className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 rounded-xl shadow-sm shadow-indigo-500/20 transition cursor-pointer"
+                      >
+                        + Post in {selectedCategory}
+                      </button>
+                    </div>
+                  )
                 ) : (
                   <button
                     onClick={() => handleOpenCreateBox()}
@@ -841,10 +872,30 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
           
           {/* About Hub Card */}
           <div className="bg-[#141417] rounded-2xl border border-white/[0.08] p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
-            <h4 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-              <Info className="h-4 w-4 text-indigo-400" />
-              About Hub
-            </h4>
+            <div className="flex items-center justify-between mb-2.5">
+              <h4 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Info className="h-4 w-4 text-indigo-400" />
+                About Hub
+              </h4>
+              {isCreator && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onOpenSettings) {
+                      onOpenSettings();
+                    } else {
+                      setShowSettingsModal(true);
+                    }
+                  }}
+                  className="flex items-center gap-1 text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 px-2 py-1 rounded-lg border border-indigo-500/20 transition-all cursor-pointer"
+                  title="Manage Community Settings"
+                  aria-label="Manage Hub"
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                  <span>Manage Hub</span>
+                </button>
+              )}
+            </div>
             <p className="text-xs text-zinc-400 font-normal leading-relaxed">
               {activeCommunity.description}
             </p>
@@ -1051,6 +1102,18 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
       >
         <Plus className="w-5 h-5" />
       </button>
+
+      {/* Community Settings Modal */}
+      {isCreator && (
+        <CommunitySettingsModal
+          isOpen={showSettingsModal}
+          onClose={() => setShowSettingsModal(false)}
+          activeCommunity={activeCommunity}
+          currentUserId={currentUser?.id}
+          onCommunityDeleted={onCommunityDeleted}
+          showToast={showToast}
+        />
+      )}
 
     </div>
   );

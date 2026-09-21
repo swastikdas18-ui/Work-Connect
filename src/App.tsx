@@ -37,7 +37,8 @@ import {
   Sparkle,
   Share2,
   Download,
-  Smartphone
+  Smartphone,
+  Settings
 } from 'lucide-react';
 
 import { mockCategories } from './data/mockData';
@@ -47,6 +48,7 @@ import { uploadToCloudinary } from './lib/cloudinary';
 import { User, Post, CourseTrack, CalendarEvent, Broadcast, Comment, Community } from './types';
 import { CommunityTab } from './components/CommunityTab';
 import { LeaderboardTab } from './components/LeaderboardTab';
+import { CommunitySettingsModal } from './components/CommunitySettingsModal';
 
 // Lazy loaded tabs to reduce initial bundle size and speed up first paint
 const ClassroomTab = lazy(() => import('./components/ClassroomTab').then(m => ({ default: m.ClassroomTab })));
@@ -164,6 +166,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
     setCommunities,
     setMemberships,
     addCommunityOptimistic,
+    removeCommunityOptimistic,
     toggleMembershipOptimistic
   } = useCommunity();
   
@@ -216,6 +219,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
 
   // State controls
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCommunitySettingsModal, setShowCommunitySettingsModal] = useState(false);
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -1170,7 +1174,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
     );
   }
 
-  const isAnyModalOpen = showCreateModal || showProfileModal || showSearchModal || showAuthModal || showInstallModal || !!inspectingUser;
+  const isAnyModalOpen = showCreateModal || showCommunitySettingsModal || showProfileModal || showSearchModal || showAuthModal || showInstallModal || !!inspectingUser;
 
   return (
     <div className="min-h-screen bg-[#09090B] text-zinc-100 flex flex-col font-sans select-none antialiased">
@@ -1212,12 +1216,23 @@ function AppContent({ auth }: { auth: AuthContextType }) {
             )}
 
             {viewMode === 'community' && activeCommunity && (
-              <>
+              <div className="flex items-center gap-2">
                 <ChevronRight className="h-4 w-4 text-zinc-600 hidden md:block" />
                 <span className="text-xs font-semibold text-zinc-200 hidden md:block truncate max-w-[150px]">
                   {activeCommunity.name}
                 </span>
-              </>
+                {user && (activeCommunity.created_by === user.id || activeCommunity.createdBy === user.id) && (
+                  <button
+                    onClick={() => setShowCommunitySettingsModal(true)}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 px-2 py-1 rounded-lg border border-indigo-500/20 transition-all cursor-pointer"
+                    title="Manage Hub (Roles & Deletion)"
+                    aria-label="Manage Hub"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Settings</span>
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -1849,6 +1864,13 @@ function AppContent({ auth }: { auth: AuthContextType }) {
                       activeCommunity.createdBy === user.id
                     ))
                   )}
+                  onCommunityDeleted={() => {
+                    if (activeCommunity) {
+                      removeCommunityOptimistic(activeCommunity.id);
+                    }
+                    backToPortal();
+                  }}
+                  onOpenSettings={() => setShowCommunitySettingsModal(true)}
                 />
               )}
 
@@ -2134,6 +2156,21 @@ function AppContent({ auth }: { auth: AuthContextType }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Community Settings Modal */}
+      {showCommunitySettingsModal && activeCommunity && (
+        <CommunitySettingsModal
+          isOpen={showCommunitySettingsModal}
+          onClose={() => setShowCommunitySettingsModal(false)}
+          activeCommunity={activeCommunity}
+          currentUserId={user?.id}
+          onCommunityDeleted={() => {
+            removeCommunityOptimistic(activeCommunity.id);
+            backToPortal();
+          }}
+          showToast={showToast}
+        />
       )}
 
       <OfflineIndicator />

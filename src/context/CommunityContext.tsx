@@ -18,6 +18,7 @@ export interface CommunityContextType {
   setCommunities: React.Dispatch<React.SetStateAction<Community[]>>;
   setMemberships: React.Dispatch<React.SetStateAction<Membership[]>>;
   addCommunityOptimistic: (newCommunity: Community, membership?: Membership) => void;
+  removeCommunityOptimistic: (communityId: string) => void;
   toggleMembershipOptimistic: (communityId: string, userId: string) => Promise<void>;
 }
 
@@ -224,6 +225,25 @@ export const CommunityProvider: React.FC<CommunityProviderProps> = ({ children, 
     }
   }, []);
 
+  const removeCommunityOptimistic = useCallback((communityId: string) => {
+    const updatedComm = globalCommunitiesCache.filter((c) => c.id !== communityId);
+    globalCommunitiesCache = updatedComm;
+    setCommunitiesState(updatedComm);
+    try {
+      localStorage.setItem(LOCAL_STORAGE_COMMUNITIES_KEY, JSON.stringify(updatedComm));
+    } catch {}
+
+    const updatedMems = globalMembershipsCache.filter((m) => m.community_id !== communityId);
+    globalMembershipsCache = updatedMems;
+    setMembershipsState(updatedMems);
+    try {
+      localStorage.setItem(LOCAL_STORAGE_MEMBERSHIPS_KEY, JSON.stringify(updatedMems));
+    } catch {}
+
+    setActiveCommunityId((curr) => (curr === communityId ? null : curr));
+    setViewMode((curr) => (curr === 'community' ? 'portal' : curr));
+  }, []);
+
   const toggleMembershipOptimistic = useCallback(async (communityId: string, userId: string) => {
     const comm = globalCommunitiesCache.find((c) => c.id === communityId);
     if (!comm) return;
@@ -353,6 +373,7 @@ export const CommunityProvider: React.FC<CommunityProviderProps> = ({ children, 
     setCommunities,
     setMemberships,
     addCommunityOptimistic,
+    removeCommunityOptimistic,
     toggleMembershipOptimistic
   }), [
     communities,
@@ -368,6 +389,7 @@ export const CommunityProvider: React.FC<CommunityProviderProps> = ({ children, 
     setCommunities,
     setMemberships,
     addCommunityOptimistic,
+    removeCommunityOptimistic,
     toggleMembershipOptimistic
   ]);
 

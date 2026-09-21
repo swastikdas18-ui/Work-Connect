@@ -47,6 +47,8 @@ interface CommunityTabProps {
   onSelectUser?: (user: User) => void;
   showToast?: (message: string) => void;
   isLoadingPosts?: boolean;
+  isAdminOrOwner?: boolean;
+  isAdminOrCreator?: boolean;
 }
 
 export const CommunityTab: React.FC<CommunityTabProps> = ({
@@ -64,8 +66,19 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
   onOpenNewsletterComposeWithContent,
   onSelectUser,
   showToast,
-  isLoadingPosts = false
+  isLoadingPosts = false,
+  isAdminOrOwner = false,
+  isAdminOrCreator = false
 }) => {
+  const isUserAdminOrCreator = Boolean(
+    isAdminOrCreator ||
+    isAdminOrOwner ||
+    (activeCommunity && currentUser && (
+      activeCommunity.created_by === currentUser.id ||
+      activeCommunity.createdBy === currentUser.id
+    ))
+  );
+
   const [sortBy, setSortBy] = useState<'activity' | 'newest' | 'top'>('activity');
   const [showCreateBox, setShowCreateBox] = useState(false);
   const [title, setTitle] = useState('');
@@ -73,6 +86,23 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
   const [codeSnippet, setCodeSnippet] = useState('');
   const [category, setCategory] = useState('All');
   const [sendAsNewsletter, setSendAsNewsletter] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  const handleOpenCreateBox = (preferredCategory?: string) => {
+    let initialCat = preferredCategory || (category !== 'All' ? category : selectedCategory);
+    if (!initialCat || initialCat === 'All') {
+      initialCat = isUserAdminOrCreator ? 'Announcements' : 'Help Wanted';
+    } else if (initialCat.toLowerCase() === 'announcements' && !isUserAdminOrCreator) {
+      initialCat = 'Help Wanted';
+    }
+    setCategory(initialCat);
+    setShowCreateBox(true);
+    setTimeout(() => {
+      const el = document.getElementById('post-composer-form');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      titleInputRef.current?.focus();
+    }, 60);
+  };
 
   // Zero-cost image compression state
   const [selectedImage, setSelectedImage] = useState<{
@@ -191,7 +221,14 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
     setIsSubmitting(true);
 
     try {
-      const targetCategory = category === 'All' ? 'Discussions' : category;
+      let targetCategory = category && category !== 'All' ? category : (isUserAdminOrCreator ? 'Announcements' : 'Help Wanted');
+      if (targetCategory.toLowerCase() === 'announcements' && !isUserAdminOrCreator) {
+        showToast?.('Only community leaders and admins can publish announcements.');
+        isSubmittingRef.current = false;
+        setIsSubmitting(false);
+        return;
+      }
+
       await onAddPost({
         title: title.trim(),
         content: content.trim(),
@@ -298,7 +335,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
               type="button"
               id="post-composer-trigger"
               data-testid="post-composer-trigger"
-              onClick={() => setShowCreateBox(true)}
+              onClick={() => handleOpenCreateBox()}
               className="w-full text-left bg-white rounded-xl border border-zinc-200/80 p-4 shadow-sm cursor-pointer flex items-center gap-3 hover:border-zinc-300 transition-all dark:bg-zinc-950 dark:border-zinc-850"
             >
               <img 
@@ -312,17 +349,18 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
             </button>
           ) : (
             <motion.form 
+              id="post-composer-form"
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               onSubmit={handleSubmitPost}
-              className="bg-white rounded-xl border border-zinc-200/80 p-5 shadow-md space-y-4 dark:bg-zinc-950 dark:border-zinc-850"
+              className="bg-white rounded-xl border border-zinc-200/80 p-5 shadow-md space-y-4 dark:bg-zinc-950 dark:border-zinc-850 scroll-mt-24"
             >
               <div className="flex items-center justify-between border-b border-zinc-100 pb-2 dark:border-zinc-800">
                 <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">New Publication</span>
                 <button 
                   type="button" 
                   onClick={() => setShowCreateBox(false)}
-                  className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                  className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer"
                 >
                   Close
                 </button>
@@ -330,6 +368,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
 
               <div className="space-y-3">
                 <input 
+                  ref={titleInputRef}
                   type="text" 
                   required
                   placeholder="Post title..."
@@ -444,9 +483,19 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
                     onChange={(e) => setCategory(e.target.value)}
                     className="text-xs font-bold border border-zinc-200 rounded-lg bg-white px-2.5 py-1.5 text-zinc-700 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-300 focus:outline-none"
                   >
-                    {categories.filter(c => c !== 'All').map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
+                    {categories.filter(c => c !== 'All').map(c => {
+                      const isAnnouncements = c.toLowerCase() === 'announcements';
+                      const isDisabled = isAnnouncements && !isUserAdminOrCreator;
+                      return (
+                        <option 
+                          key={c} 
+                          value={c} 
+                          disabled={isDisabled}
+                        >
+                          {c}{isDisabled ? ' (Admins Only)' : ''}
+                        </option>
+                      );
+                    })}
                   </select>
 
                   <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -490,22 +539,34 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
               />
             </div>
 
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setSortBy('activity')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    sortBy === 'activity' ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50' : 'text-zinc-400 hover:text-zinc-600'
+                  }`}
+                >
+                  Trending
+                </button>
+                <button
+                  onClick={() => setSortBy('newest')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    sortBy === 'newest' ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50' : 'text-zinc-400 hover:text-zinc-600'
+                  }`}
+                >
+                  New
+                </button>
+              </div>
+
               <button
-                onClick={() => setSortBy('activity')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                  sortBy === 'activity' ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50' : 'text-zinc-400 hover:text-zinc-600'
-                }`}
+                type="button"
+                onClick={() => handleOpenCreateBox()}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-sm transition cursor-pointer shrink-0"
+                aria-label="Create a new post"
               >
-                Trending
-              </button>
-              <button
-                onClick={() => setSortBy('newest')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                  sortBy === 'newest' ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50' : 'text-zinc-400 hover:text-zinc-600'
-                }`}
-              >
-                New
+                <Plus className="w-3.5 h-3.5" />
+                <span>Create Post</span>
               </button>
             </div>
           </div>
@@ -553,10 +614,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
                       Clear filter
                     </button>
                     <button
-                      onClick={() => {
-                        setCategory(selectedCategory);
-                        setShowCreateBox(true);
-                      }}
+                      onClick={() => handleOpenCreateBox(selectedCategory)}
                       className="px-4 py-2 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition cursor-pointer"
                     >
                       + Post in {selectedCategory}
@@ -564,7 +622,7 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
                   </div>
                 ) : (
                   <button
-                    onClick={() => setShowCreateBox(true)}
+                    onClick={() => handleOpenCreateBox()}
                     className="mt-4 px-4 py-2 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition cursor-pointer"
                   >
                     + Publish First Post
@@ -854,6 +912,16 @@ export const CommunityTab: React.FC<CommunityTabProps> = ({
           </>
         )}
       </AnimatePresence>
+
+      {/* Mobile Floating Action Button (FAB) for Post Creation */}
+      <button
+        type="button"
+        onClick={() => handleOpenCreateBox()}
+        className="sm:hidden fixed bottom-20 right-4 z-40 p-3.5 rounded-full bg-indigo-600 text-white shadow-xl hover:bg-indigo-500 active:scale-95 transition-all cursor-pointer flex items-center justify-center"
+        aria-label="Create a new post"
+      >
+        <Plus className="w-5 h-5" />
+      </button>
 
     </div>
   );

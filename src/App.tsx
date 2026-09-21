@@ -738,6 +738,21 @@ function AppContent({ auth }: { auth: AuthContextType }) {
       return;
     }
 
+    // Guard against forbidden posts before dispatching the RPC
+    const targetCategory = postData.category || 'Discussions';
+    const isTargetCommunityAdminOrOwner = Boolean(
+      isAdminOrOwner || 
+      (activeCommunity && user && (
+        activeCommunity.created_by === user.id || 
+        activeCommunity.createdBy === user.id
+      ))
+    );
+
+    if (targetCategory.toLowerCase() === 'announcements' && !isTargetCommunityAdminOrOwner) {
+      showToast('Only community leaders and admins can publish announcements.');
+      return;
+    }
+
     setIsSubmittingPost(true);
     try {
       let createdPostRecord: any;
@@ -761,7 +776,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
 
       const { data: newPost, error } = await supabase.rpc('create_post_with_rate_limit', {
         p_community_id: selectedCommunityId,
-        p_category: postData.category,
+        p_category: targetCategory,
         p_title: postData.title.trim(),
         p_body: postData.content.trim(),
         p_image_url: resolvedMediaUrl || null,
@@ -799,7 +814,7 @@ function AppContent({ auth }: { auth: AuthContextType }) {
         content: postData.content.trim(),
         codeSnippet: postData.codeSnippet,
         mediaUrl: resolvedMediaUrl || (createdPostRecord as any)?.image_url || (createdPostRecord as any)?.media_url || undefined,
-        category: postData.category || 'Discussions',
+        category: targetCategory,
         timestamp: 'Just now',
         upvotes: 0,
         hasUpvoted: false,
@@ -807,6 +822,10 @@ function AppContent({ auth }: { auth: AuthContextType }) {
       };
 
       setPosts((prev) => [formattedNewPost, ...(prev || [])]);
+      // Update active category filter so the user immediately sees their post in the right section
+      if (selectedCategory !== 'All' && selectedCategory.toLowerCase() !== targetCategory.toLowerCase()) {
+        setSelectedCategory('All');
+      }
       lastPostTimestampRef.current = Date.now();
       showToast('Thread published on the cohort feed!');
 
@@ -1810,6 +1829,14 @@ function AppContent({ auth }: { auth: AuthContextType }) {
                   onSelectUser={(u) => setInspectingUser(u)}
                   showToast={showToast}
                   isLoadingPosts={dbLoading}
+                  isAdminOrOwner={isAdminOrOwner}
+                  isAdminOrCreator={Boolean(
+                    isAdminOrOwner || 
+                    (activeCommunity && user && (
+                      activeCommunity.created_by === user.id || 
+                      activeCommunity.createdBy === user.id
+                    ))
+                  )}
                 />
               )}
 

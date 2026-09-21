@@ -44,14 +44,14 @@ let globalCommunitiesCache: Community[] = loadFromLocalStorage<Community[]>(LOCA
 let globalMembershipsCache: Membership[] = loadFromLocalStorage<Membership[]>(LOCAL_STORAGE_MEMBERSHIPS_KEY, []);
 let globalIsInitialized = globalCommunitiesCache.length > 0;
 
-// Ensure initial fallback is persisted in localStorage on cold boot
-if (globalCommunitiesCache.length > 0) {
+export const clearCommunityCaches = () => {
+  globalMembershipsCache = [];
   try {
-    if (!localStorage.getItem(LOCAL_STORAGE_COMMUNITIES_KEY)) {
-      localStorage.setItem(LOCAL_STORAGE_COMMUNITIES_KEY, JSON.stringify(globalCommunitiesCache));
-    }
+    localStorage.removeItem(LOCAL_STORAGE_MEMBERSHIPS_KEY);
+    localStorage.removeItem('wc_communities');
+    localStorage.removeItem('wc_memberships');
   } catch {}
-}
+};
 
 const CommunityContext = createContext<CommunityContextType | undefined>(undefined);
 
@@ -281,7 +281,25 @@ export const CommunityProvider: React.FC<CommunityProviderProps> = ({ children, 
     refreshCommunities(true);
   }, [refreshCommunities]);
 
-  // Initial load
+  // Clean up stale memberships whenever authentication changes
+  useEffect(() => {
+    // Clear legacy/stale local storage keys so old dev state doesn't persist
+    try {
+      localStorage.removeItem('wc_communities');
+      localStorage.removeItem('wc_memberships');
+    } catch {}
+
+    if (!user) {
+      // Guest mode
+      globalMembershipsCache = [];
+      setMembershipsState([]);
+      try {
+        localStorage.removeItem(LOCAL_STORAGE_MEMBERSHIPS_KEY);
+      } catch {}
+    }
+  }, [user]);
+
+  // Initial load / revalidation on user change
   useEffect(() => {
     const isColdBoot = globalCommunitiesCache.length === 0;
     refreshCommunities(!isColdBoot);

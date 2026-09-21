@@ -452,31 +452,64 @@ function AppContent({ auth }: { auth: AuthContextType }) {
   }, []);
 
   // PWA Install Flow
-  const [showInstallModal, setShowInstallModal] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(globalDeferredPrompt);
+  const [showInstallModal, setShowInstallModal] = useState<boolean>(false);
+  const [isStandalone, setIsStandalone] = useState<boolean>(false);
 
   useEffect(() => {
-    const isAppInstalled = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
-    setIsStandalone(Boolean(isAppInstalled));
+    // Check standalone mode on mount
+    const isStandaloneMode =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true;
+    setIsStandalone(Boolean(isStandaloneMode));
+
+    // If module-level event already fired, sync it into state
+    if (globalDeferredPrompt) {
+      setDeferredPrompt(globalDeferredPrompt);
+    }
+
+    const handleBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      globalDeferredPrompt = e;
+      setDeferredPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      globalDeferredPrompt = null;
+      setDeferredPrompt(null);
+      setIsStandalone(true);
+      setShowInstallModal(false);
+      showToast('Work Connect installed successfully!');
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
   }, []);
 
   const handleInstallClick = async () => {
-    if (globalDeferredPrompt) {
+    const promptEvent = deferredPrompt || globalDeferredPrompt;
+    if (promptEvent) {
       try {
-        globalDeferredPrompt.prompt();
-        const choice = await globalDeferredPrompt.userChoice;
-        if (choice.outcome === 'accepted') {
+        await promptEvent.prompt();
+        const choice = await promptEvent.userChoice;
+        if (choice && choice.outcome === 'accepted') {
+          showToast('Installing Work Connect...');
           globalDeferredPrompt = null;
-          showToast('Work Connect installed successfully!');
+          setDeferredPrompt(null);
+          return;
         }
       } catch (err) {
-        console.error('Install prompt error:', err);
-        setShowInstallModal(true);
+        console.warn('Native install prompt unavailable, displaying fallback modal:', err);
       }
-    } else {
-      // If browser has already handled or does not support automatic prompts, show actionable modal
-      setShowInstallModal(true);
     }
+
+    // Always show fallback guidance modal if native prompt is rejected, cancelled, or running in an automated/unsupported browser
+    setShowInstallModal(true);
   };
 
   // Find active community
@@ -1301,12 +1334,14 @@ function AppContent({ auth }: { auth: AuthContextType }) {
 
             {/* PWA Direct trigger */}
             {!isStandalone && (
-              <button 
+              <button
+                id="pwa-install-btn"
                 onClick={handleInstallClick}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition shadow-xs cursor-pointer"
                 aria-label="Install Work Connect app"
                 title="Install Work Connect app"
-                className="hidden sm:flex items-center gap-1 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900 cursor-pointer"
               >
+                <Download className="w-3.5 h-3.5" />
                 <span>Install</span>
               </button>
             )}
@@ -2005,99 +2040,62 @@ function AppContent({ auth }: { auth: AuthContextType }) {
       />
 
       {/* PWA Install Instructions Fallback Modal */}
-      <AnimatePresence>
-        {showInstallModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowInstallModal(false)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-xs"
-            />
-            
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0, y: 10 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 10 }}
-              className="relative w-full max-w-md bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 p-6 z-10 overflow-hidden"
-            >
-              <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-xs">
-                    <Download className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-zinc-900 dark:text-white">Install Work Connect</h3>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">Install as an app on your device</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setShowInstallModal(false)}
-                  className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
-                  aria-label="Close"
-                >
-                  <X className="h-5 w-5" />
-                </button>
+      {showInstallModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="install-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          onClick={() => setShowInstallModal(false)}
+        >
+          <div
+            className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <h3 id="install-modal-title" className="text-base font-semibold text-zinc-100 flex items-center gap-2">
+                <Download className="w-5 h-5 text-indigo-400" />
+                Install Work Connect
+              </h3>
+              <button
+                onClick={() => setShowInstallModal(false)}
+                className="text-zinc-400 hover:text-zinc-200 p-1 rounded-lg cursor-pointer"
+                aria-label="Close modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-sm text-zinc-400">
+              Install Work Connect on your device for fast offline access, instant notifications, and a full-screen app experience.
+            </p>
+
+            <div className="space-y-3 bg-zinc-950/60 p-4 rounded-xl border border-zinc-800/80 text-xs text-zinc-300">
+              <div className="flex items-start gap-2.5">
+                <span className="font-semibold text-indigo-400 min-w-[55px]">Desktop:</span>
+                <span>Click the install icon in your browser URL bar or open browser menu (⋮) → &quot;Install Work Connect&quot;.</span>
               </div>
-
-              <div className="mt-4 space-y-3">
-                <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
-                  To install Work Connect directly to your home screen or desktop:
-                </p>
-
-                {/* Chrome / Edge / Brave (Desktop) */}
-                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/70 dark:border-zinc-800 flex items-start gap-3">
-                  <div className="h-7 w-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
-                    <Laptop className="h-4 w-4" />
-                  </div>
-                  <div className="text-xs">
-                    <span className="font-semibold text-zinc-900 dark:text-white block">Chrome / Edge / Brave (Desktop)</span>
-                    <span className="text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                      Click the install icon in the URL bar (top right) or open menu (⋮) → &apos;Install Work Connect&apos;.
-                    </span>
-                  </div>
-                </div>
-
-                {/* Safari / iOS */}
-                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/70 dark:border-zinc-800 flex items-start gap-3">
-                  <div className="h-7 w-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
-                    <Share2 className="h-4 w-4" />
-                  </div>
-                  <div className="text-xs">
-                    <span className="font-semibold text-zinc-900 dark:text-white block">Safari / iOS</span>
-                    <span className="text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                      Tap the Share button in Safari, then select &apos;Add to Home Screen&apos;.
-                    </span>
-                  </div>
-                </div>
-
-                {/* Chrome / Android */}
-                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/70 dark:border-zinc-800 flex items-start gap-3">
-                  <div className="h-7 w-7 rounded-lg bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
-                    <Smartphone className="h-4 w-4" />
-                  </div>
-                  <div className="text-xs">
-                    <span className="font-semibold text-zinc-900 dark:text-white block">Chrome / Android</span>
-                    <span className="text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                      Tap menu (⋮) → &apos;Add to Home Screen&apos; or &apos;Install App&apos;.
-                    </span>
-                  </div>
-                </div>
+              <div className="flex items-start gap-2.5">
+                <span className="font-semibold text-indigo-400 min-w-[55px]">iOS/Safari:</span>
+                <span>Tap the Share button (<span className="text-zinc-100">⎋</span>) at the bottom, then tap &quot;Add to Home Screen&quot;.</span>
               </div>
-
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={() => setShowInstallModal(false)}
-                  className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors cursor-pointer shadow-sm shadow-indigo-600/20"
-                >
-                  Got it
-                </button>
+              <div className="flex items-start gap-2.5">
+                <span className="font-semibold text-indigo-400 min-w-[55px]">Android:</span>
+                <span>Tap the browser menu (⋮) in Chrome, then tap &quot;Add to Home screen&quot; or &quot;Install app&quot;.</span>
               </div>
-            </motion.div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setShowInstallModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition cursor-pointer"
+              >
+                Got it
+              </button>
+            </div>
           </div>
-        )}
-      </AnimatePresence>
+        </div>
+      )}
 
       <OfflineIndicator />
 

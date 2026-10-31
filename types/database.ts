@@ -230,6 +230,119 @@ export interface EventRsvp {
   updated_at: string;
 }
 
+// Live Supabase schema aligned interfaces for communities, profiles, courses & lessons
+export interface ProfileRow {
+  id: string;
+  full_name: string;
+  avatar_url: string | null;
+  headline?: string | null;
+  cohort_tag?: string | null;
+  karma_points?: number;
+  role: string;
+  created_at: string;
+}
+
+export interface CommunityRow {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  privacy: "public" | "gated" | "private";
+  accent_color: string;
+  created_by: string | null;
+  member_count: number;
+  banner_url: string | null;
+  created_at: string;
+}
+
+export interface MembershipRow {
+  id: string;
+  user_id: string;
+  community_id: string;
+  role: string;
+  joined_at: string;
+}
+
+export interface LivePostRow {
+  id: string;
+  community_id: string;
+  author_id: string;
+  category: string;
+  title: string;
+  body: string;
+  upvotes_count?: number;
+  comments_count?: number;
+  created_at: string;
+}
+
+export interface LiveCommentRow {
+  id: string;
+  post_id: string;
+  author_id: string;
+  body: string;
+  created_at: string;
+}
+
+export interface LiveEventRow {
+  id: string;
+  community_id: string;
+  title: string;
+  description: string | null;
+  host_name: string;
+  host_avatar?: string | null;
+  starts_at: string;
+  meet_url: string;
+  attendees_count?: number;
+  created_at: string;
+}
+
+export interface LiveNewsletterRow {
+  id: string;
+  community_id: string;
+  subject: string;
+  recipient_group: string;
+  status: "draft" | "sent";
+  sent_at?: string | null;
+  body?: string | null;
+  open_rate?: number;
+  click_rate?: number;
+  created_at: string;
+}
+
+export interface CourseRow {
+  id: string;
+  community_id: string;
+  title: string;
+  description: string;
+  banner_color: string;
+  created_at: string;
+}
+
+export interface LessonRow {
+  id: string;
+  course_id: string;
+  title: string;
+  duration: string;
+  description: string;
+  video_url?: string | null;
+  download_url?: string | null;
+  created_at: string;
+}
+
+export interface LessonCompletionRow {
+  id: string;
+  user_id: string;
+  lesson_id: string;
+  completed_at: string;
+}
+
+export interface PostUpvoteRow {
+  id: string;
+  post_id: string;
+  user_id: string;
+  created_at: string;
+}
+
 export type PostRow = Post;
 export type PostCommentRow = PostComment;
 export type PostReactionRow = PostReaction;
@@ -606,6 +719,138 @@ export interface Database {
             url: string;
           };
           read_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      profiles: {
+        Row: ProfileRow;
+        Insert: {
+          id: string;
+          full_name: string;
+          avatar_url?: string | null;
+          headline?: string | null;
+          cohort_tag?: string | null;
+          karma_points?: number;
+          role?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          full_name?: string;
+          avatar_url?: string | null;
+          headline?: string | null;
+          cohort_tag?: string | null;
+          karma_points?: number;
+          role?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      communities: {
+        Row: CommunityRow;
+        Insert: {
+          id?: string;
+          name: string;
+          slug: string;
+          description?: string | null;
+          privacy?: "public" | "gated" | "private";
+          accent_color?: string;
+          created_by?: string | null;
+          member_count?: number;
+          banner_url?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          slug?: string;
+          description?: string | null;
+          privacy?: "public" | "gated" | "private";
+          accent_color?: string;
+          created_by?: string | null;
+          member_count?: number;
+          banner_url?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      memberships: {
+        Row: MembershipRow;
+        Insert: {
+          id?: string;
+          user_id: string;
+          community_id: string;
+          role?: string;
+          joined_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          community_id?: string;
+          role?: string;
+          joined_at?: string;
+        };
+        Relationships: [];
+      };
+      courses: {
+        Row: CourseRow;
+        Insert: {
+          id?: string;
+          community_id: string;
+          title: string;
+          description: string;
+          banner_color: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          community_id?: string;
+          title?: string;
+          description?: string;
+          banner_color?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      lessons: {
+        Row: LessonRow;
+        Insert: {
+          id?: string;
+          course_id: string;
+          title: string;
+          duration: string;
+          description: string;
+          video_url?: string | null;
+          download_url?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          course_id?: string;
+          title?: string;
+          duration?: string;
+          description?: string;
+          video_url?: string | null;
+          download_url?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      comments: {
+        Row: LiveCommentRow;
+        Insert: {
+          id?: string;
+          post_id: string;
+          author_id: string;
+          body: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          post_id?: string;
+          author_id?: string;
+          body?: string;
           created_at?: string;
         };
         Relationships: [];

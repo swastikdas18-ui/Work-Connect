@@ -14,8 +14,8 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const [drawerOpen, setDrawerOpen] = React.useState(false);
-  const tenantId = "tenant-default";
-  const currentUserId = "user-default";
+  const tenantId = "00000000-0000-0000-0000-000000000001";
+  const currentUserId = "00000000-0000-0000-0000-000000000001";
 
   return (
     <div className="flex min-h-dvh flex-col bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">

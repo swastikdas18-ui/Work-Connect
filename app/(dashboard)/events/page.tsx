@@ -3,9 +3,9 @@ import { EventAgenda } from "@/components/community/EventAgenda";
 
 export default function EventsPage() {
   // In a full session environment, tenantId and currentUser are derived from cookies/headers/auth
-  const tenantId = "tenant-default";
+  const tenantId = "00000000-0000-0000-0000-000000000001";
   const currentUser = {
-    id: "user-default",
+    id: "00000000-0000-0000-0000-000000000001",
     name: "Team Member",
     role: "admin", // Allows scheduling and full agenda management
   };

@@ -2,6 +2,8 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import { Database } from "@/types/database";
 import { createServerSupabaseClient } from "@/lib/db/client";
 
+export const DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001";
+
 export class TenantIsolationError extends Error {
   constructor(message: string = "Missing or invalid tenant context") {
     super(message);

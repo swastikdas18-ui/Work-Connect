@@ -13,7 +13,7 @@ function NewsletterReaderContent() {
   const [newsletter, setNewsletter] = React.useState<Newsletter | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
 
-  const tenantId = "tenant-default";
+  const tenantId = "00000000-0000-0000-0000-000000000001";
 
   React.useEffect(() => {
     async function load() {

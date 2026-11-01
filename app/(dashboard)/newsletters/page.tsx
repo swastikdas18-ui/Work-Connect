@@ -13,8 +13,8 @@ export default function NewslettersPage() {
   const [editorOpen, setEditorOpen] = React.useState(false);
 
   // In production, retrieved from active authenticated session
-  const tenantId = "tenant-default";
-  const currentUserId = "user-1";
+  const tenantId = "00000000-0000-0000-0000-000000000001";
+  const currentUserId = "00000000-0000-0000-0000-000000000001";
   const currentUserRole: UserRole = "admin";
 
   const isPrivileged = currentUserRole === "admin" || currentUserRole === "owner" || currentUserRole === "moderator";

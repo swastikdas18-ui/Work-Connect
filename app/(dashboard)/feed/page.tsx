@@ -2,9 +2,9 @@ import { PostFeed } from "@/components/community/PostFeed";
 
 export default function CommunityFeedPage() {
   // In production, currentUser and tenantId are resolved via server session
-  const defaultTenantId = "tenant-default";
+  const defaultTenantId = "00000000-0000-0000-0000-000000000001";
   const currentUser = {
-    id: "user-1",
+    id: "00000000-0000-0000-0000-000000000001",
     name: "Alex Carter",
     role: "member",
   };

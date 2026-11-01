@@ -10,8 +10,8 @@ export default function MembersDirectoryPage() {
   const [inviteOpen, setInviteOpen] = React.useState(false);
 
   // In production, currentUser and tenantId are retrieved from session
-  const tenantId = "tenant-default";
-  const currentUserId = "user-1";
+  const tenantId = "00000000-0000-0000-0000-000000000001";
+  const currentUserId = "00000000-0000-0000-0000-000000000001";
   const currentUserRole: UserRole = "admin";
 
   return (

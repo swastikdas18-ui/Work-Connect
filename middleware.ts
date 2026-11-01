@@ -33,6 +33,11 @@ export async function middleware(request: NextRequest) {
   // Extract tenant context from header, auth, or subdomain
   let tenantId = extractTenantId(request);
 
+  // Fallback to standard default UUID for unpartitioned traffic
+  if (!tenantId) {
+    tenantId = process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID || "00000000-0000-0000-0000-000000000001";
+  }
+
   // If not found in headers, check user session metadata
   const {
     data: { user },

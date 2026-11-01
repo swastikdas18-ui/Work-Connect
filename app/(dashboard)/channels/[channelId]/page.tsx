@@ -13,9 +13,9 @@ export default function ChannelChatPage() {
   const [infoOpen, setInfoOpen] = React.useState(false);
 
   // In production, currentUser and tenantId are supplied from the active authenticated session
-  const activeTenantId = "tenant-default";
+  const activeTenantId = "00000000-0000-0000-0000-000000000001";
   const currentUser = {
-    id: "user-1",
+    id: "00000000-0000-0000-0000-000000000001",
     name: "Alex Carter",
   };
 

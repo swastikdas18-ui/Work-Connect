@@ -2,11 +2,11 @@
 
 import * as React from "react";
 import { Suspense } from "react";
-import { BottomNav } from "@/components/ui/BottomNav";
+import { BottomNav } from "@/components/navigation/BottomNav";
+import { Header } from "@/components/navigation/Header";
 import { MobileDrawer } from "@/components/ui/MobileDrawer";
 import { ChannelList } from "@/components/community/ChannelList";
 import { BroadcastBanner } from "@/components/community/BroadcastBanner";
-import { NotificationCenter } from "@/components/community/NotificationCenter";
 
 export default function DashboardLayout({
   children,
@@ -22,22 +22,8 @@ export default function DashboardLayout({
       {/* Real-Time Company Broadcast Banner */}
       <BroadcastBanner tenantId={tenantId} />
 
-      {/* Top Header Shell */}
-      <header className="flex h-14 items-center justify-between border-b border-zinc-200 px-4 dark:border-zinc-800 md:px-6">
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Work-Connect
-          </span>
-          <span className="hidden rounded-md bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 sm:inline">
-            Enterprise Portal
-          </span>
-        </div>
-
-        {/* Global Notification Bell Trigger */}
-        <div className="flex items-center gap-2">
-          <NotificationCenter tenantId={tenantId} userId={currentUserId} />
-        </div>
-      </header>
+      {/* Top Navbar Header */}
+      <Header tenantId={tenantId} currentUserId={currentUserId} />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Desktop Side Navigation Drawer for Channels (hidden on mobile, fixed width on md+) */}
@@ -47,8 +33,8 @@ export default function DashboardLayout({
           </Suspense>
         </aside>
 
-        {/* Main Content Area: Dynamic Viewport & Responsive */}
-        <main className="flex flex-1 flex-col overflow-y-auto pb-16 md:pb-0">
+        {/* Main Content Area: Dynamic Viewport & Responsive with pb-20 on mobile to clear bottom dock */}
+        <main className="flex flex-1 flex-col overflow-y-auto pb-20 md:pb-0">
           <Suspense fallback={<div className="h-full w-full animate-pulse bg-zinc-50 dark:bg-zinc-900" />}>
             {children}
           </Suspense>

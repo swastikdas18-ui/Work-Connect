@@ -261,21 +261,37 @@ export function PostFeed({ tenantId, currentUser }: PostFeedProps) {
               </div>
             ))
           ) : posts.length === 0 ? (
-            // Empty State
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-200 p-12 text-center dark:border-zinc-800">
-              <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
-                No posts in this category yet
+            // Empty State - Modern Interactive Welcome Card
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-zinc-200/80 bg-gradient-to-b from-white to-zinc-50/60 p-8 text-center shadow-xs dark:border-zinc-800 dark:from-zinc-900 dark:to-zinc-950 sm:p-12">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-600 ring-1 ring-blue-500/20 dark:bg-blue-500/10 dark:text-blue-400">
+                <Plus className="h-7 w-7" />
+              </div>
+              <h3 className="mt-4 text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+                Welcome to Work-Connect!
               </h3>
-              <p className="mt-1 text-sm text-zinc-500">
-                Be the first to share an update, highlight, or discussion!
+              <p className="mt-1.5 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
+                This community feed is waiting for its first spark. Share updates, showcase achievements, or ask a question.
               </p>
-              <button
-                onClick={() => setComposerOpen(true)}
-                className="mt-4 flex min-h-[44px] items-center gap-2 rounded-xl bg-blue-600 px-4 text-xs font-semibold text-white hover:bg-blue-700"
-              >
-                <Plus className="h-4 w-4" />
-                <span>Create First Post</span>
-              </button>
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setComposerOpen(true)}
+                  className="flex min-h-[44px] items-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-500 active:scale-[0.98]"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Share First Update</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveCategory("qna");
+                    setComposerOpen(true);
+                  }}
+                  className="flex min-h-[44px] items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-xs transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                >
+                  <span>Ask a Question</span>
+                </button>
+              </div>
             </div>
           ) : (
             <>

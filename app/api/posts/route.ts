@@ -24,7 +24,7 @@ export async function GET(request: Request) {
         .from("posts")
         .select(`
           *,
-          author:users!author_id (
+          author:profiles!posts_author_id_fkey (
             id,
             full_name,
             avatar_url,
@@ -43,7 +43,37 @@ export async function GET(request: Request) {
         query = query.lt("created_at", cursor);
       }
 
-      const { data: postsData, error } = await query;
+      let { data: postsData, error } = await query;
+
+      // Fallback: If posts_author_id_fkey targets users or profiles is not used, retry with author:users!author_id
+      if (error && error.message.includes("posts_author_id_fkey")) {
+        let fallbackQuery = db
+          .from("posts")
+          .select(`
+            *,
+            author:users!author_id (
+              id,
+              full_name,
+              avatar_url,
+              role
+            )
+          `)
+          .eq("tenant_id", tenantId)
+          .order("created_at", { ascending: false })
+          .limit(limit);
+
+        if (category && category !== "all" && VALID_CATEGORIES.includes(category as PostCategory)) {
+          fallbackQuery = fallbackQuery.eq("category", category);
+        }
+
+        if (cursor) {
+          fallbackQuery = fallbackQuery.lt("created_at", cursor);
+        }
+
+        const fallbackResult = await fallbackQuery;
+        postsData = fallbackResult.data;
+        error = fallbackResult.error;
+      }
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });

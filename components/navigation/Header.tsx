@@ -126,13 +126,15 @@ export function Header({ tenantId, currentUserId }: HeaderProps) {
                 </div>
 
                 <div className="pt-1">
-                  <Link
-                    href="/admin/analytics"
-                    onClick={() => setMenuOpen(false)}
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 transition"
-                  >
-                    <span>Admin Dashboard</span>
-                  </Link>
+                  {userProfile.role === "admin" && (
+                    <Link
+                      href="/admin/analytics"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 transition"
+                    >
+                      <span>Admin Dashboard</span>
+                    </Link>
+                  )}
 
                   <button
                     onClick={handleSignOut}

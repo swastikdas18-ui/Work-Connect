@@ -335,7 +335,24 @@ export function PostFeed({ tenantId, currentUser }: PostFeedProps) {
         onOpenChange={setComposerOpen}
         tenantId={tenantId}
         authorId={currentUser.id}
-        onPostCreated={() => fetchPosts(activeCategory)}
+        onPostCreated={(newPost) => {
+          if (newPost) {
+            // Optimistically append the new post to the feed list without requiring a full page refresh
+            const postWithAuthor = {
+              ...newPost,
+              author: {
+                id: currentUser.id,
+                full_name: currentUser.name,
+                avatar_url: null,
+                role: currentUser.role,
+              },
+              hasLiked: false,
+            };
+            setPosts((prev) => [postWithAuthor, ...prev.filter((p) => p.id !== newPost.id)]);
+          } else {
+            void fetchPosts(activeCategory);
+          }
+        }}
       />
 
       {/* Comments Drawer */}

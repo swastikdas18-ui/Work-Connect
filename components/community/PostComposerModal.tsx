@@ -10,7 +10,7 @@ interface PostComposerModalProps {
   onOpenChange: (open: boolean) => void;
   tenantId: string;
   authorId: string;
-  onPostCreated?: () => void;
+  onPostCreated?: (createdPost?: import("@/types/database").Post) => void;
 }
 
 const CATEGORIES: { label: string; value: PostCategory }[] = [
@@ -91,11 +91,12 @@ export function PostComposerModal({
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => null);
         setContent("");
         setMediaUrls([]);
         setCategory("general");
         onOpenChange(false);
-        onPostCreated?.();
+        onPostCreated?.(data?.post);
       }
     } finally {
       setIsSubmitting(false);

@@ -1,0 +1,27 @@
+name: Authentication and Core Navigation Suite
+tags: [e2e, auth, navigation]
+base_url: https://work-connect-silk.vercel.app
+
+suite:
+  tests:
+    - name: Demo Intern Login and Feed Mount
+      statements:
+        - URL: /login
+        - VERIFY: Work-Connect is visible
+        - intent: Click Demo Intern button
+          action: click
+          locator: "getByRole('button', { name: 'Demo Intern (Alex Carter)' })"
+        - VERIFY: Current URL is /feed
+        - VERIFY: Work-Connect is visible
+
+    - name: Profile Page Details and Organization Verification
+      statements:
+        - URL: /profile
+        - VERIFY: Workspace Details is visible
+        - VERIFY: Work-Connect Community is visible
+        - VERIFY: 00000000-0000-0000-0000-000000000001 is visible
+
+    - name: Events Directory View
+      statements:
+        - URL: /events
+        - VERIFY: Community Events is visible

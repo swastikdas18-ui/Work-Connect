@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "shiplight": {
+      "source": "ShiplightAI/agent-skills-v2",
+      "sourceType": "github",
+      "skillPath": "shiplight/SKILL.md",
+      "computedHash": "0e13400b104fb54304f9bd9e8e6d1f35ac04986d32afcef982fd861c3dc5c4d9"
+    }
+  }
+}

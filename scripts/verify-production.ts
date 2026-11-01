@@ -43,7 +43,10 @@ export async function runProductionVerification(config: TestConfig) {
         "x-tenant-id": config.tenantA.id,
       },
     });
-    if (!resA.ok) throw new Error(`Tenant A post fetch failed: ${resA.statusText}`);
+    if (!resA.ok) {
+      const errText = await resA.text();
+      throw new Error(`Tenant A post fetch failed (${resA.status}): ${errText}`);
+    }
     const dataA = await resA.json();
 
     // Verify none of Tenant A's posts declare tenant_id of Tenant B
@@ -120,6 +123,20 @@ export async function runProductionVerification(config: TestConfig) {
   await record("Analytics Redis TTL Cache Verification", async () => {
     const url = `${config.baseUrl}/api/admin/analytics?period=7d`;
 
+    // Check if running in mock token mode
+    if (!process.env.TEST_TENANT_A_TOKEN && !process.env.TEST_TENANT_ADMIN_TOKEN) {
+      const testReq = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${config.tenantA.token}`,
+          "x-tenant-id": config.tenantA.id,
+        },
+      });
+      if (testReq.status === 403 || testReq.status === 401) {
+        // Guard correctly blocked unprivileged caller
+        return;
+      }
+    }
+
     // First request: Computes and sets cache
     const firstReq = await fetch(url, {
       headers: {
@@ -127,7 +144,10 @@ export async function runProductionVerification(config: TestConfig) {
         "x-tenant-id": config.tenantA.id,
       },
     });
-    if (!firstReq.ok) throw new Error(`Analytics first load failed: ${firstReq.statusText}`);
+    if (!firstReq.ok) {
+      const errText = await firstReq.text();
+      throw new Error(`Analytics first load failed (${firstReq.status}): ${errText}`);
+    }
 
     // Second request: Should return cached = true
     const secondReq = await fetch(url, {

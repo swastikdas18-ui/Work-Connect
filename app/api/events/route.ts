@@ -49,6 +49,7 @@ export async function GET(req: NextRequest) {
       }
 
       const { data, error } = await query;
+      let finalEventsData: unknown[] = (data || []) as unknown[];
 
       if (error) {
         // Fallback simple query if complex joins or columns fail
@@ -56,10 +57,10 @@ export async function GET(req: NextRequest) {
           .from("events")
           .select("*")
           .limit(50);
-        return NextResponse.json({ events: fallbackData || [] });
+        finalEventsData = (fallbackData || []) as unknown[];
       }
 
-      const eventsList = (data || []) as unknown as (CommunityEvent & {
+      const eventsList = finalEventsData as (CommunityEvent & {
         organizer?: unknown;
         rsvps?: unknown[];
       })[];

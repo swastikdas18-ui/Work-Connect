@@ -194,14 +194,14 @@ const urlArg = args.find((a) => a.startsWith("--url="))?.split("=")[1];
 const config: TestConfig = {
   baseUrl: urlArg || process.env.TEST_APP_URL || "http://localhost:3000",
   tenantA: {
-    id: process.env.TEST_TENANT_A_ID || "tenant-alpha",
+    id: process.env.TEST_TENANT_A_ID || "00000000-0000-0000-0000-000000000001",
     token: process.env.TEST_TENANT_A_TOKEN || "mock-token-a",
-    userId: process.env.TEST_TENANT_A_USER_ID || "user-a",
+    userId: process.env.TEST_TENANT_A_USER_ID || "00000000-0000-0000-0000-0000000000aa",
   },
   tenantB: {
-    id: process.env.TEST_TENANT_B_ID || "tenant-beta",
+    id: process.env.TEST_TENANT_B_ID || "00000000-0000-0000-0000-000000000002",
     token: process.env.TEST_TENANT_B_TOKEN || "mock-token-b",
-    userId: process.env.TEST_TENANT_B_USER_ID || "user-b",
+    userId: process.env.TEST_TENANT_B_USER_ID || "00000000-0000-0000-0000-0000000000bb",
   },
 };
 

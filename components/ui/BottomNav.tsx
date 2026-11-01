@@ -13,10 +13,10 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: "Home", href: "/dashboard", icon: Home },
-  { label: "Feed", href: "/feed", icon: Users },
+  { label: "Feed", href: "/feed", icon: Home },
+  { label: "Members", href: "/members", icon: Users },
   { label: "Chats", href: "/channels/general", icon: MessageSquare, badgeCount: 3 },
-  { label: "Profile", href: "/dashboard/profile", icon: User },
+  { label: "Events", href: "/events", icon: User },
 ];
 
 export function BottomNav() {
@@ -30,8 +30,8 @@ export function BottomNav() {
       {navItems.map((item) => {
         const Icon = item.icon;
         const isActive =
-          item.href === "/dashboard"
-            ? pathname === "/dashboard"
+          item.href === "/" || item.href === "/feed"
+            ? pathname === "/" || pathname === "/feed"
             : pathname.startsWith(item.href);
 
         return (

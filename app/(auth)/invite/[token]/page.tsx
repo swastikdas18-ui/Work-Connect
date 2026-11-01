@@ -49,7 +49,7 @@ function InviteAcceptContent() {
       });
 
       setTimeout(() => {
-        router.push("/dashboard");
+        router.push("/feed");
       }, 2000);
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : "Error accepting invitation");

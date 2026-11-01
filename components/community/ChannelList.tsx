@@ -72,7 +72,7 @@ export function ChannelList({ onSelectChannel, onOpenSettings }: ChannelListProp
             return (
               <Link
                 key={channel.id}
-                href={`/dashboard/channels/${channel.id}`}
+                href={`/channels/${channel.id}`}
                 onClick={() => onSelectChannel?.(channel.id)}
                 className={cn(
                   "flex min-h-[44px] items-center justify-between rounded-xl px-3 py-2 text-sm font-medium transition-colors",

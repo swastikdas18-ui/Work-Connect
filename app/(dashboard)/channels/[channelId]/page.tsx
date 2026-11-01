@@ -26,7 +26,7 @@ export default function ChannelChatPage() {
         <div className="flex items-center gap-2">
           {/* Back button on mobile to return to channels list */}
           <Link
-            href="/dashboard"
+            href="/feed"
             aria-label="Back to channels"
             className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900 md:hidden"
           >

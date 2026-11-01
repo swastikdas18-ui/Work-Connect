@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Building2, LogOut, ChevronDown, Sparkles } from "lucide-react";
 import { NotificationCenter } from "@/components/community/NotificationCenter";
 import { createBrowserSupabaseClient } from "@/lib/db/browser";
+import { useStoredUser, useIsMounted } from "@/lib/hooks/useMounted";
 
 export interface HeaderProps {
   tenantId: string;
@@ -14,33 +15,17 @@ export interface HeaderProps {
 
 export function Header({ tenantId, currentUserId }: HeaderProps) {
   const router = useRouter();
+  const mounted = useIsMounted();
+  const storedUser = useStoredUser();
   const [menuOpen, setMenuOpen] = React.useState(false);
-  const [userProfile] = React.useState<{
-    name: string;
-    role: string;
-    email: string;
-  }>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const stored = localStorage.getItem("work_connect_user");
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          return {
-            name: parsed.name || parsed.user_metadata?.full_name || "Alex Carter",
-            role: parsed.role || "intern",
-            email: parsed.email || "alex.carter@workconnect.internal",
-          };
-        }
-      } catch {
-        // ignore JSON parse errors
-      }
-    }
-    return {
-      name: "Alex Carter",
-      role: "intern",
-      email: "alex.carter@workconnect.internal",
-    };
-  });
+
+  const userProfile = mounted
+    ? storedUser
+    : {
+        name: "Alex Carter",
+        role: "intern",
+        email: "alex.carter@workconnect.internal",
+      };
 
   const handleSignOut = async () => {
     try {
@@ -88,17 +73,17 @@ export function Header({ tenantId, currentUserId }: HeaderProps) {
             aria-label="User profile menu"
           >
             <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-xs font-semibold text-white shadow-xs">
-              {userProfile.name.slice(0, 2).toUpperCase()}
+              {mounted ? userProfile.name.slice(0, 2).toUpperCase() : "AC"}
               {/* Online status indicator */}
               <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-zinc-950" />
             </div>
 
             <div className="hidden text-left sm:block">
               <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 leading-tight">
-                {userProfile.name}
+                {mounted ? userProfile.name : "Alex Carter"}
               </p>
               <p className="text-[10px] text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                {userProfile.role}
+                {mounted ? userProfile.role : "intern"}
               </p>
             </div>
 

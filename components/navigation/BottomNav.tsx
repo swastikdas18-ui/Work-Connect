@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Calendar, MessageSquare, Users, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useIsMounted } from "@/lib/hooks/useMounted";
 
 interface NavItem {
   label: string;
@@ -23,6 +24,7 @@ const navItems: NavItem[] = [
 
 export function BottomNav() {
   const pathname = usePathname();
+  const mounted = useIsMounted();
 
   return (
     <nav
@@ -32,9 +34,10 @@ export function BottomNav() {
       {navItems.map((item) => {
         const Icon = item.icon;
         const isActive =
-          item.href === "/" || item.href === "/feed"
+          mounted &&
+          (item.href === "/" || item.href === "/feed"
             ? pathname === "/" || pathname === "/feed"
-            : pathname.startsWith(item.href);
+            : pathname.startsWith(item.href));
 
         return (
           <Link

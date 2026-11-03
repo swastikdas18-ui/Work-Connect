@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Drawer } from "vaul";
-import { ImagePlus, X, Loader2 } from "lucide-react";
+import { ImagePlus, X, Loader2, Link as LinkIcon } from "lucide-react";
 import { PostCategory } from "@/types/database";
 
 interface PostComposerModalProps {
@@ -31,6 +31,8 @@ export function PostComposerModal({
   const [content, setContent] = React.useState("");
   const [category, setCategory] = React.useState<PostCategory>("general");
   const [mediaUrls, setMediaUrls] = React.useState<string[]>([]);
+  const [imageUrlInput, setImageUrlInput] = React.useState("");
+  const [showUrlInput, setShowUrlInput] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isUploading, setIsUploading] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -64,6 +66,14 @@ export function PostComposerModal({
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  };
+
+  const handleAddMediaUrl = () => {
+    const trimmed = imageUrlInput.trim();
+    if (!trimmed) return;
+    setMediaUrls((prev) => [...prev, trimmed]);
+    setImageUrlInput("");
+    setShowUrlInput(false);
   };
 
   const handleRemoveMedia = (index: number) => {
@@ -181,9 +191,31 @@ export function PostComposerModal({
               </div>
             )}
 
+            {/* Paste Image URL Input */}
+            {showUrlInput && (
+              <div className="mt-3 flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-800 dark:bg-zinc-950">
+                <LinkIcon className="h-4 w-4 text-zinc-400 shrink-0" />
+                <input
+                  type="url"
+                  value={imageUrlInput}
+                  onChange={(e) => setImageUrlInput(e.target.value)}
+                  placeholder="Paste image URL (e.g. https://example.com/photo.png)..."
+                  className="w-full bg-transparent text-xs text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-100"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddMediaUrl}
+                  disabled={!imageUrlInput.trim()}
+                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:opacity-40"
+                >
+                  Add
+                </button>
+              </div>
+            )}
+
             {/* Action Bar */}
             <div className="mt-4 flex items-center justify-between border-t border-zinc-100 pt-3 dark:border-zinc-800">
-              <div>
+              <div className="flex items-center gap-1">
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -204,7 +236,16 @@ export function PostComposerModal({
                   ) : (
                     <ImagePlus className="h-4 w-4 text-blue-600" />
                   )}
-                  <span>Attach Media</span>
+                  <span>Upload Files</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowUrlInput((prev) => !prev)}
+                  className="flex min-h-[44px] items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                >
+                  <LinkIcon className="h-4 w-4 text-zinc-400" />
+                  <span className="hidden sm:inline">Image URL</span>
                 </button>
               </div>
 

@@ -240,7 +240,7 @@ export default function ChannelChatPage() {
     : messages;
 
   return (
-    <div className="flex h-full flex-col bg-white dark:bg-zinc-950">
+    <div className="h-[calc(100dvh-4rem)] md:h-[calc(100vh-5rem)] flex flex-col bg-white dark:bg-zinc-950">
       {/* Top Header */}
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-200 bg-white/95 px-4 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/95">
         <div className="flex items-center gap-2">
@@ -316,7 +316,7 @@ export default function ChannelChatPage() {
       </header>
 
       {/* Message Stream */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+      <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-6 space-y-4">
         {isLoading ? (
           <div className="flex h-full flex-col items-center justify-center space-y-2 text-zinc-400">
             <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
@@ -387,7 +387,7 @@ export default function ChannelChatPage() {
       </div>
 
       {/* Sticky Bottom Message Composer */}
-      <div className="border-t border-zinc-200 bg-white/95 p-3 dark:border-zinc-800 dark:bg-zinc-950/95 sm:p-4">
+      <div className="p-3 bg-zinc-950/80 border-t border-zinc-800 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:pb-3">
         <form onSubmit={handleSendMessage} className="relative flex flex-col rounded-2xl border border-zinc-300 bg-white shadow-xs focus-within:border-blue-500 dark:border-zinc-800 dark:bg-zinc-900">
           <textarea
             ref={textareaRef}

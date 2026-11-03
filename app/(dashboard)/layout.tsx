@@ -26,15 +26,15 @@ export default function DashboardLayout({
       <Header tenantId={tenantId} currentUserId={currentUserId} />
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Desktop Side Navigation Drawer for Channels (hidden on mobile, fixed width on md+) */}
-        <aside className="hidden w-72 shrink-0 border-r border-zinc-200 dark:border-zinc-800 md:flex md:flex-col">
+        {/* Desktop Side Navigation Drawer for Channels (strictly hidden on mobile, fixed width on md+) */}
+        <aside className="hidden md:flex md:w-64 shrink-0 border-r border-zinc-200 dark:border-zinc-800 md:flex-col">
           <Suspense fallback={<div className="h-full w-full animate-pulse bg-zinc-100 dark:bg-zinc-900" />}>
             <ChannelList onOpenSettings={() => setDrawerOpen(true)} />
           </Suspense>
         </aside>
 
-        {/* Main Content Area: Dynamic Viewport & Responsive with pb-20 on mobile to clear bottom dock */}
-        <main className="flex flex-1 flex-col overflow-y-auto pb-20 md:pb-0">
+        {/* Main Content Area: Dynamic Viewport & Responsive */}
+        <main className="flex-1 overflow-x-hidden overflow-y-auto pb-24 md:pb-6 pt-16 md:pt-4 px-3 sm:px-6">
           <Suspense fallback={<div className="h-full w-full animate-pulse bg-zinc-50 dark:bg-zinc-900" />}>
             {children}
           </Suspense>
